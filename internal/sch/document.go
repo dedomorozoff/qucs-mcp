@@ -59,6 +59,9 @@ type Document struct {
 	Name       string
 	Components []ComponentLine
 	Wires      []WireLine
+	// Remarks carry non-fatal notes (e.g. unsupported sweep parameters)
+	// surfaced to the MCP caller; they are not written into the file.
+	Remarks []string
 }
 
 // NewDocument creates an empty named document.
@@ -74,6 +77,11 @@ func (d *Document) AddComponent(c ComponentLine) {
 // AddWire appends a wire line.
 func (d *Document) AddWire(w WireLine) {
 	d.Wires = append(d.Wires, w)
+}
+
+// SetRemark adds a non-fatal note visible to the MCP caller.
+func (d *Document) SetRemark(msg string) {
+	d.Remarks = append(d.Remarks, msg)
 }
 
 // Render returns the complete .sch text (LF line endings).

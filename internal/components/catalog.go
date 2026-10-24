@@ -239,21 +239,34 @@ func SpicePar(ref string, x, y int, params map[string]string) sch.ComponentLine 
 }
 
 // SpiceInclude builds a file include block (.include equivalent).
+// Calibrated template carries two file slots plus two empties.
 func SpiceInclude(ref string, x, y int, files ...string) sch.ComponentLine {
-	pairs := make([]any, 0, 10)
-	for i := range 5 {
-		want := 1
-		if i >= len(files) {
+	pairs := make([]any, 0, 8)
+	for i := range 2 {
+		if i < len(files) {
+			pairs = append(pairs, files[i], 1)
+		} else {
 			pairs = append(pairs, "", 0)
-			want = 0
-			continue
 		}
-		pairs = append(pairs, files[i], want)
 	}
+	pairs = append(pairs, "", 0, "", 0)
 	return sch.ComponentLine{
 		Type: "SpiceInclude", Ref: ref, X: x, Y: y,
 		LX: -34, LY: 16, Rot: 0, Mirror: 0,
 		Body: body(pairs...),
+	}
+}
+
+// SpiceModel builds a block holding raw SPICE .model text.
+func SpiceModel(ref string, x, y int, model string) sch.ComponentLine {
+	return sch.ComponentLine{
+		Type: "SpiceModel", Ref: ref, X: x, Y: y,
+		LX: -27, LY: 16, Rot: 0, Mirror: 0,
+		Body: body(
+			model, 1,
+			"", 0, "", 0, "", 0,
+			"Line_5=", 0,
+		),
 	}
 }
 
