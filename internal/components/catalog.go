@@ -309,3 +309,24 @@ func Supported(schType string) bool {
 	}
 	return false
 }
+
+// SpiceLetter is the SPICE device letter used by qucs-s netlists. qucs-s
+// prefixes a reference by this letter when it does not already start with
+// it (calibrated against `qucs-s -n --ngspice` output).
+func SpiceLetter(schType string) string {
+	switch schType {
+	case "S4Q_V":
+		return "V"
+	case "S4Q_I":
+		return "I"
+	case "DIODE_SPICE":
+		return "D"
+	case "_BJT":
+		return "Q"
+	case "_MOSFET":
+		return "M"
+	case "R", "C", "L":
+		return schType
+	}
+	return ""
+}
