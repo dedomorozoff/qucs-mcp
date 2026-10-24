@@ -8,9 +8,9 @@ package sch
 
 import (
 	"fmt"
-	"strings"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // SchemaVer is the schematic format version this package emits.
@@ -41,10 +41,10 @@ func (c ComponentLine) Render() string {
 
 // WireLine is a single line inside <Wires>.
 type WireLine struct {
-	X1, Y1     int
-	X2, Y2     int
-	Label      string // net label; labels connect nets by name
-	LX, LY, Rot int   // label position and orientation
+	X1, Y1      int
+	X2, Y2      int
+	Label       string // net label; labels connect nets by name
+	LX, LY, Rot int    // label position and orientation
 }
 
 // Render formats the wire line.
