@@ -172,19 +172,24 @@ func addAnalyses(doc *sch.Document, spec *model.CircuitSpec) error {
 			if sweep == "dec" || sweep == "oct" {
 				qt = "log"
 			}
+			// spice4qucs loses the mega suffix ("1M" is emitted as "1m")
+			// when translating .AC to ngspice, so start/stop go in the
+			// suffix-free scientific form ("1e+06") which passes through
+			// verbatim (calibrated: 1e6/1e+06/1000000 all give the exact
+			// 10->1e6 sweep, plain "1M" silently truncates to 10..10k).
+			start := neutralNumber(a.Params["start"])
+			stop := neutralNumber(a.Params["stop"])
 			doc.AddComponent(components.AC(fmt.Sprintf("AC%d", stack+1), 40, nextY(),
-				qt, a.Params["start"], a.Params["stop"], pts))
+				qt, start, stop, pts))
 		case "tran":
-			start := a.Params["tstart"]
-			if start == "" {
-				start = "0"
-			}
-			pts, err := tranPoints(start, a.Params["tstop"], a.Params["tstep"])
+			start := neutralNumber(orzero(a.Params["tstart"]))
+			stop := neutralNumber(a.Params["tstop"])
+			pts, err := tranPoints(orzero(a.Params["tstart"]), a.Params["tstop"], a.Params["tstep"])
 			if err != nil {
 				return err
 			}
 			doc.AddComponent(components.TR(fmt.Sprintf("TR%d", stack+1), 40, nextY(),
-				start, a.Params["tstop"], pts, "0"))
+				start, stop, pts, "0"))
 		}
 	}
 	return nil
@@ -246,6 +251,27 @@ func tranPoints(start, stop, step string) (int, error) {
 		pts = 2
 	}
 	return pts, nil
+}
+
+// neutralNumber converts a Qucs-suffixed numeric literal to the
+// suffix-free scientific form that travels through spice4qucs into
+// ngspice unchanged ("1M" → "1e+06"). Unparseable text is returned
+// untouched (Build validates numeric fields where they matter).
+func neutralNumber(s string) string {
+	if s == "" {
+		return s
+	}
+	if v, ok := parseQucsNumber(s); ok {
+		return strconv.FormatFloat(v, 'g', -1, 64)
+	}
+	return s
+}
+
+func orzero(s string) string {
+	if s == "" {
+		return "0"
+	}
+	return s
 }
 
 // parseQucsNumber parses Qucs-suffixed numbers: "10", "1M" (mega),

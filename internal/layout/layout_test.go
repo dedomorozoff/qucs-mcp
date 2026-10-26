@@ -99,8 +99,9 @@ func TestBuildACDecAutoresizingMask(t *testing.T) {
 	if ac == nil {
 		t.Fatal("no .AC block")
 	}
-	// dec 91 over 10..1M (5 decades) -> Qucs Points = 91*5+1 = 456
-	want := `<.AC AC1 1 40 560 0 70 0 0 "log" 1 "10" 1 "1M" 1 "456" 1 "no" 0>`
+	// dec 91 over 10..1M (5 decades) -> Qucs Points = 91*5+1 = 456; the
+	// stop goes in suffix-free scientific form (spice4qucs loses "M").
+	want := `<.AC AC1 1 40 560 0 70 0 0 "log" 1 "10" 1 "1e+06" 1 "456" 1 "no" 0>`
 	if ac.Render() != want {
 		t.Fatalf("ac line = %q, want %q", ac.Render(), want)
 	}
