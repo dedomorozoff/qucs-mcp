@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lau/qucs-mcp/internal/components"
-	"github.com/lau/qucs-mcp/internal/model"
-	"github.com/lau/qucs-mcp/internal/netlist"
+	"github.com/dedomorozoff/qucs-mcp/internal/components"
+	"github.com/dedomorozoff/qucs-mcp/internal/model"
+	"github.com/dedomorozoff/qucs-mcp/internal/netlist"
 )
 
 // PinResult is one checked pin.

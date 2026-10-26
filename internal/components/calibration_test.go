@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lau/qucs-mcp/internal/sch"
+	"github.com/dedomorozoff/qucs-mcp/internal/sch"
 )
 
 // Calibration against the installed Qucs-S (integration test).

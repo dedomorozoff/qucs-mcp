@@ -19,9 +19,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lau/qucs-mcp/internal/components"
-	"github.com/lau/qucs-mcp/internal/model"
-	"github.com/lau/qucs-mcp/internal/sch"
+	"github.com/dedomorozoff/qucs-mcp/internal/components"
+	"github.com/dedomorozoff/qucs-mcp/internal/model"
+	"github.com/dedomorozoff/qucs-mcp/internal/sch"
 )
 
 const (

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lau/qucs-mcp/internal/model"
-	"github.com/lau/qucs-mcp/internal/netlist"
+	"github.com/dedomorozoff/qucs-mcp/internal/model"
+	"github.com/dedomorozoff/qucs-mcp/internal/netlist"
 )
 
 func TestCompareHealthyRCLowPass(t *testing.T) {

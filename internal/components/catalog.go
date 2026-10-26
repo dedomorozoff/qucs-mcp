@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lau/qucs-mcp/internal/sch"
+	"github.com/dedomorozoff/qucs-mcp/internal/sch"
 )
 
 // Pin is a calibrated pin offset in component-local coordinates

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lau/qucs-mcp/internal/config"
+	"github.com/dedomorozoff/qucs-mcp/internal/config"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

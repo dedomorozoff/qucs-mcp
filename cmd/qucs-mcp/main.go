@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/lau/qucs-mcp/internal/config"
-	"github.com/lau/qucs-mcp/internal/server"
+	"github.com/dedomorozoff/qucs-mcp/internal/config"
+	"github.com/dedomorozoff/qucs-mcp/internal/server"
 )
 
 func main() {

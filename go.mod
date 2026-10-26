@@ -1,4 +1,4 @@
-module github.com/lau/qucs-mcp
+module github.com/dedomorozoff/qucs-mcp
 
 go 1.25.0
 

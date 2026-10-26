@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lau/qucs-mcp/internal/model"
-	"github.com/lau/qucs-mcp/internal/sch"
+	"github.com/dedomorozoff/qucs-mcp/internal/model"
+	"github.com/dedomorozoff/qucs-mcp/internal/sch"
 )
 
 // rcSpec returns the test circuit: SPICE voltage divider low-pass.

@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lau/qucs-mcp/internal/model"
+	"github.com/dedomorozoff/qucs-mcp/internal/model"
 )
 
 // Parse parses the supported SPICE subset into a CircuitSpec.

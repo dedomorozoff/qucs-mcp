@@ -25,7 +25,7 @@ func TestStdioSmoke(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		exe = filepath.Join(tmp, "qucs-mcp")
 	}
-	cmd := exec.Command("go", "build", "-o", exe, "github.com/lau/qucs-mcp/cmd/qucs-mcp")
+	cmd := exec.Command("go", "build", "-o", exe, "github.com/dedomorozoff/qucs-mcp/cmd/qucs-mcp")
 	cmd.Dir = moduleRoot(t)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)

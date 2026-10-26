@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lau/qucs-mcp/internal/layout"
-	"github.com/lau/qucs-mcp/internal/model"
+	"github.com/dedomorozoff/qucs-mcp/internal/layout"
+	"github.com/dedomorozoff/qucs-mcp/internal/model"
 )
 
 // TestRCSimulateIntegration generates RC low-pass, simulates it
