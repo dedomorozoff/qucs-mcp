@@ -11,6 +11,10 @@ import "strings"
 // NormalizeValue converts a SPICE-style bare numeric literal into the
 // form Qucs-S understands. Anything that is not a bare literal (e.g.
 // "V(T)*2", "{R1*2}", "") is returned unchanged.
+//
+// Supports the "3k3" (SPICEOPUS) style: digits after the SI suffix
+// continue the fractional part ("3k3" → 3.3k, "1k33" → 1.33k). Without
+// this normalization qucs-s silently misreads "3k3" as 3k.
 func NormalizeValue(s string) string {
 	t := strings.TrimSpace(s)
 	if !bareLiteral(t) {
@@ -19,24 +23,49 @@ func NormalizeValue(s string) string {
 	body, next := scanNumber(t)
 	rest := t[next:]
 	if len(rest) >= 3 && strings.EqualFold(rest[:3], "meg") {
-		return body + "M"
+		return fractionalBody(body, rest[3:]) + "M"
 	}
 	if len(rest) >= 1 {
 		if letter, ok := siLetter(rest[0]); ok {
-			return body + letter
+			return fractionalBody(body, rest[1:]) + letter
+		}
+		// PSpice/LTspice style "4R7" = 4.7 ohm: R after digits is the
+		// decimal separator, not a unit.
+		if rest[0] == 'R' || rest[0] == 'r' {
+			return fractionalBody(body, rest[1:])
 		}
 	}
 	return body
 }
 
+// fractionalBody splices the digits following the SI suffix into the
+// numeric body ("3" + "3" → "3.3"); junk units after the digits
+// ("10u2F") are dropped. An empty digit tail returns the body as is.
+func fractionalBody(body, tail string) string {
+	digits := ""
+	for i := 0; i < len(tail); i++ {
+		if tail[i] < '0' || tail[i] > '9' {
+			break
+		}
+		digits += string(tail[i])
+	}
+	if digits == "" {
+		return body
+	}
+	return body + "." + digits
+}
+
 // bareLiteral reports whether s is a plain numeric literal, optionally
-// followed by an SI multiplier and junk units ("10uF", "1kOhm").
-// Rejects expressions ("V(T)*2", "1e-6*2") and {...} templates.
+// followed by an SI multiplier, suffix digits ("3k3") and junk units
+// ("10uF", "1kOhm"). Rejects expressions ("V(T)*2", "1e-6*2") and {...}
+// templates.
 func bareLiteral(s string) bool {
 	if s == "" {
 		return false
 	}
 	seenDigit := false
+	letterSeen := false
+	letterAfterDigits := false
 	i := 0
 	// optional sign
 	if s[i] == '+' || s[i] == '-' {
@@ -47,11 +76,17 @@ func bareLiteral(s string) bool {
 		switch {
 		case c >= '0' && c <= '9':
 			seenDigit = true
+			if letterAfterDigits {
+				// digits after unit letters ("10uf2"): no longer a form
+				// we normalize
+				return false
+			}
 		case c == '.':
+			if letterSeen {
+				return false // decimal point after letters
+			}
 		case c == 'e' || c == 'E':
-			// exponent only when directly after a digit/dot and followed
-			// by digits (with optional sign); otherwise it's a letter.
-			exp := i > 0 && (s[i-1] >= '0' && s[i-1] <= '9' || s[i-1] == '.')
+			exp := i > 0 && (s[i-1] >= '0' && s[i-1] <= '9' || s[i-1] == '.') && !letterSeen
 			if exp {
 				j := i + 1
 				if j < len(s) && (s[j] == '+' || s[j] == '-') {
@@ -64,13 +99,19 @@ func bareLiteral(s string) bool {
 					j++
 				}
 				i = j - 1
+			} else if letterSeen {
+				letterAfterDigits = true // continuation letter in the units
+			} else {
+				return false // stray exponent letter
 			}
-			// not an exponent: fall through as a letter (e.g. "MEG")
 		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
 			if !seenDigit {
 				return false
 			}
-			// suffix part must stay letter-only
+			if letterSeen {
+				letterAfterDigits = true
+			}
+			letterSeen = true
 		default:
 			return false
 		}
