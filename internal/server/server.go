@@ -25,11 +25,15 @@ func NewServer(cfg config.Config) *Server {
 		Version: cfg.ServerVersion,
 	}, nil)
 	s.registerDoctor()
+	if err := s.registerTools(); err != nil {
+		// registerTools currently cannot fail; fail fast if it ever can.
+		panic(err)
+	}
 	return s
 }
 
-// Register registers every known tool. As later tasks add circuit tools,
-// they are appended here; today only doctor exists.
+// Register registers every circuit tool (kept for API stability; the
+// constructor already wires the tools).
 func (s *Server) Register(ctx context.Context) error {
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,6 +50,30 @@ func TestStdioSmoke(t *testing.T) {
 		// doctor fails when qucs-s.exe is absent; the smoke test only
 		// checks protocol connectivity.
 		t.Logf("doctor reported error (Qucs-S likely missing): %v", res.Content)
+	}
+
+	// list_components must answer over stdio too.
+	res, err = sess.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "list_components",
+		Arguments: map[string]any{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError {
+		t.Fatalf("list_components failed over stdio: %v", res.Content)
+	}
+	n := 0
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok {
+			if text := tc.Text; n == 0 && !strings.Contains(text, "S4Q_V") {
+				t.Fatalf("list_components payload misses catalog types: %.200s", text)
+			}
+			n++
+		}
+	}
+	if n == 0 {
+		t.Fatal("list_components returned no text content")
 	}
 }
 

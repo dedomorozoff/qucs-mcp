@@ -43,8 +43,20 @@ func TestDoctorToolLists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Tools) != 1 || res.Tools[0].Name != "doctor" {
-		t.Fatalf("tools = %d, want only doctor", len(res.Tools))
+	want := map[string]bool{
+		"doctor":           true,
+		"create_schematic": true, "update_schematic": true,
+		"validate_schematic": true, "simulate_schematic": true,
+		"read_schematic": true, "list_components": true,
+		"describe_component": true, "open_schematic": true,
+	}
+	if len(res.Tools) != len(want) {
+		t.Fatalf("tools = %d, want %d", len(res.Tools), len(want))
+	}
+	for _, tl := range res.Tools {
+		if !want[tl.Name] {
+			t.Fatalf("unexpected tool %q", tl.Name)
+		}
 	}
 }
 

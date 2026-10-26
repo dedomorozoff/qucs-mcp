@@ -43,6 +43,18 @@ const (
 
 // Build renders spec into a schematic document.
 func Build(spec *model.CircuitSpec) (*sch.Document, error) {
+	return BuildPlaced(spec, nil)
+}
+
+// Placements overrides automatic component positions: ref → (X, Y).
+// Orientation (Rot/Mirror) stays layout-controlled, because pin stub
+// wires are generated from the catalog geometry.
+type Placements map[string][2]int
+
+// BuildPlaced renders spec with explicit component positions for refs
+// found in pl (used to preserve user-arranged positions when
+// regenerating an existing schematic).
+func BuildPlaced(spec *model.CircuitSpec, pl Placements) (*sch.Document, error) {
 	doc := sch.NewDocument(spec.Name)
 
 	cursorTwo := 0
@@ -54,13 +66,30 @@ func Build(spec *model.CircuitSpec) (*sch.Document, error) {
 		switch c.Type {
 		case "S4Q_V":
 			cursorTwo++
-			line = components.S4QV(c.Ref, xAt(cursorTwo), ySources, c.Value, false)
+			x, y := xAt(cursorTwo), ySources
+			if pl != nil {
+				if p, ok := pl[c.Ref]; ok {
+					x, y = p[0], p[1]
+				}
+			}
+			line = components.S4QV(c.Ref, x, y, c.Value, false)
 		case "S4Q_I":
 			cursorTwo++
-			line = components.S4QI(c.Ref, xAt(cursorTwo), ySources, c.Value, false)
+			x, y := xAt(cursorTwo), ySources
+			if pl != nil {
+				if p, ok := pl[c.Ref]; ok {
+					x, y = p[0], p[1]
+				}
+			}
+			line = components.S4QI(c.Ref, x, y, c.Value, false)
 		case "R", "C", "L", "DIODE_SPICE":
 			cursorTwo++
 			x, y := xAt(cursorTwo), yPassive
+			if pl != nil {
+				if p, ok := pl[c.Ref]; ok {
+					x, y = p[0], p[1]
+				}
+			}
 			switch c.Type {
 			case "R":
 				line = components.R(c.Ref, x, y, c.Value, false)
@@ -74,6 +103,11 @@ func Build(spec *model.CircuitSpec) (*sch.Document, error) {
 		case "_BJT", "_MOSFET":
 			cursorSemi++
 			x, y := xAt(cursorSemi), ySemi
+			if pl != nil {
+				if p, ok := pl[c.Ref]; ok {
+					x, y = p[0], p[1]
+				}
+			}
 			if c.Type == "_BJT" {
 				line = components.BJT(c.Ref, x, y, c.Props["flavor"] == "pnp")
 			} else {
