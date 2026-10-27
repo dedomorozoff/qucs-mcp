@@ -134,22 +134,24 @@ func Diode(ref string, x, y int, model string, vertical bool) sch.ComponentLine 
 	return c
 }
 
-// bjtBody returns the full default _BJT property body calibrated from
-// qucs-s --list-entries; pos 0 is the npn/pnp selector.
+// bjtBody returns the full _BJT property body taken verbatim from the
+// native qucs-s example ngspice/Devices/BJT_dc.sch. The --list-entries
+// reconstruction was off by one property slot, which put AREA=26.85 and
+// TEMP=0.0 into the generated netlist (dead transistor: kT=0).
+// Pos 0 is the npn/pnp selector.
 func bjtBody(pnp bool) string {
-	// Values and ordering follow the qucs-s 25/26 _BJT default template.
 	return body(
 		typ(pnp, "npn", "pnp"), 1,
-		"1e-16", 1, "1", 1, "1", 0, "0", 0, "0", 0, "0", 1,
+		"1e-14", 0, "1", 0, "1", 0, "0.3", 0, "0", 0, "100", 0,
 		"0", 0, "0", 0, "1.5", 0, "0", 0, "2", 0,
-		"100", 1, // Bf
-		"1", 0, "0", 0, "0", 0, "0", 0, "0", 0, "0", 0, "0", 0,
-		"0.75", 0, "0.33", 0, "0", 0, "0.75", 0, "0.33", 0,
+		"200", 1, // Bf
+		"3", 0, "0", 0, "0", 0, "3", 0, "1", 0, "10", 0,
+		"25e-12", 0, "0.75", 0, "0.33", 0, "8e-12", 0, "0.75", 0, "0.33", 0,
 		"1.0", 0, "0", 0, "0.75", 0, "0", 0, "0.5", 0,
-		"0.0", 0, "0.0", 0, "0.0", 0, "0.0", 0, "0.0", 0, "0.0", 0,
+		"400e-12", 0, "3", 0, "0.0", 0, "2", 0, "100e-9", 0,
 		"26.85", 0, "0.0", 0, "1.0", 0, "1.0", 0, "0.0", 0,
 		"1.0", 0, "1.0", 0, "0.0", 0, "0.0", 0, "3.0", 0, "1.11", 0,
-		"26.85", 0, "1.0", 0, "yes", 0, "Generic", 0, "Generic", 0,
+		"26.85", 0, "1.0", 0, "yes", 0,
 	)
 }
 
@@ -162,22 +164,24 @@ func BJT(ref string, x, y int, pnp bool) sch.ComponentLine {
 }
 
 func MOSFET(ref string, x, y int, pchannel bool) sch.ComponentLine {
-	body := body(
-		typ(pchannel, "nfet", "pfet"), 0,
-		"1.0 V", 1, "2e-5", 1, "0.0", 0, "0.6 V", 0, "0.0", 1,
-		"0.0 Ohm", 0, "0.0 Ohm", 0, "0.0 Ohm", 0, "1e-14 A", 0,
-		"1.0", 0, "1 um", 0, "1 um", 0, "0.0", 0, "0.1 um", 0,
-		"0.0", 0, "0.0", 0, "0.0 F", 0, "0.0 F", 0, "0.8 V", 0,
-		"0.5", 0, "0.5", 0, "0.0", 0, "0.33", 0, "0.0 ps", 0,
-		"0.0", 0, "0.0", 0, "1", 0, "600.0", 0, "0.0", 0, "1", 0, "1", 0,
-		"0.0", 0, "0.0", 0, "0.0", 0, "0.0", 0, "0.0 m", 0, "0.0 m", 0,
-		"0.0", 0, "1.0", 0, "1.0", 0, "26.85", 0, "26.85", 0,
-		"yes", 0, "Generic", 0, "Generic", 0,
-	)
+	// Values and ordering verbatim from the native qucs-s _MOSFET template
+	// (nfet default from ngspice examples); the trailing "yes"/"Generic"
+	// slots from the --list-entries reconstruction are dropped, as in
+	// native schematics the body ends at the second temperature entry.
 	return sch.ComponentLine{
 		Type: "_MOSFET", Ref: ref, X: x, Y: y,
 		LX: 8, LY: -26, Rot: 0, Mirror: 0,
-		Body: body,
+		Body: body(
+			typ(pchannel, "nfet", "pfet"), 0,
+			"1.0 V", 1, "2e-5", 0, "0.0", 0, "0.6 V", 0, "0.0", 0,
+			"0.0 Ohm", 0, "0.0 Ohm", 0, "0.0 Ohm", 0, "1e-14 A", 0,
+			"1.0", 0, "1 um", 0, "1 um", 0, "0.0", 0, "0.1 um", 0,
+			"0.0", 0, "0.0", 0, "0.0 F", 0, "0.0 F", 0, "0.8 V", 0,
+			"0.5", 0, "0.5", 0, "0.0", 0, "0.33", 0, "0.0 ps", 0,
+			"0.0", 0, "0.0", 0, "1", 0, "600.0", 0, "0.0", 0, "1", 0, "1", 0,
+			"0.0", 0, "0.0", 0, "0.0", 0, "0.0", 0, "0.0 m", 0, "0.0 m", 0,
+			"0.0", 0, "1.0", 0, "1.0", 0, "26.85", 0, "26.85", 0,
+		),
 	}
 }
 

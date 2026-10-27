@@ -80,6 +80,27 @@ No blocking findings.
     layout-controlled because stub wires regenerate from the catalog).
   - MCP SDK v1.8: `CallToolParams.Arguments` is `any` — pass the map, NOT
     pre-marshaled JSON (double encoding otherwise).
+- Suffix-digit bug (post-Task 8, live demo): SPICE `3k3`-style values lost
+  their fractional tail (spice parser kept `3k3` verbatim; qucs-s designer
+  shows `3k`). `NormalizeValue` now expands suffix-digits (`3k3`→`3.3k`,
+  `10k02`→`10.02k`, `1M5`→`1.5m` [SPICE M=milli], `4R7`→`4.7`); unit junk
+  after digits (e.g. `10u2F`) is dropped.
+- BJT native-template ruling (live demo, CE cascade): the `_BJT` body
+  reconstructed from `--list-entries` was off by one property slot — values
+  after pos ~13 misaligned, so the spice4qucs netlist came out with
+  `AREA=26.85 TEMP=0.0` (kT=0 → dead transistor, CE gain −168.6 dB) and
+  Cjc/Re/Rb/Rc silently zero. Fix: `bjtBody` now carries the body verbatim
+  from the native example `ngspice/Devices/BJT_dc.sch` (49 value/show
+  pairs, ends at `"yes" 0`, no trailing `"Generic"` slots); the npn/pnp
+  selector stays first with show=1. Verified: netlist `Q1 … AREA=1.0` (no
+  TEMP), Bf=200, Cjc=8e-12; CE amp gain −7.9 dB at 1 kHz (live ngspice).
+- MOSFET native-template ruling (same pattern): the `_MOSFET` recon body
+  had 43 correct pairs + 3 trailing extras (`"yes"`/`"Generic"` ×2, plus
+  stray show-flags on `2e-5`/`0.0`). Trailing slots dropped; body now ends
+  at the second `26.85` temperature entry exactly like native examples.
+  Ruling: for SPICE-mapped (SPICE-letter) components always quote a native
+  `.sch` example body verbatim — `--list-entries` reconstruction adds
+  tail slots and is not pin/value faithful.
 
 ## Activity
 

@@ -115,7 +115,7 @@ func TestSemiconductorRender(t *testing.T) {
 		t.Fatalf("DIODE_SPICE render = %q", d.Render())
 	}
 	q := BJT("Q1", 0, 0, false)
-	if !strings.Contains(q.Render(), `<_BJT Q1 1 0 0 8 -26 0 0 "npn" 1 "1e-16" 1 "1" 1 "1" 0`) {
+	if !strings.Contains(q.Render(), `<_BJT Q1 1 0 0 8 -26 0 0 "npn" 1 "1e-14" 0 "1" 0 "1" 0 "0.3" 0`) {
 		t.Fatalf("_BJT render prefix = %q", q.Render())
 	}
 	if !strings.Contains(BJT("Q1", 0, 0, true).Render(), `"pnp" 1`) {
