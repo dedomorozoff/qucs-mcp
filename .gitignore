@@ -1,0 +1,7 @@
+# Bundled Qucs-S installation (binaries, ~124 MB, kept locally only)
+qucs/
+
+# MCP work dir artifacts
+*.dat
+*.plot
+.claude/
