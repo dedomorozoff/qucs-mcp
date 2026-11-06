@@ -1,7 +1,7 @@
 # qucs-mcp
 ![GitHub Release](https://img.shields.io/github/v/release/dedomorozoff/qucs-mcp)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/dedomorozoff/dmed)](https://github.com/dedomorozoff/qucs-mcp)
-[![License](https://img.shields.io/github/license/dedomorozoff/dmed)](https://github.com/dedomorozoff/qucs-mcp/blob/main/LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/dedomorozoff/qucs-mcp)](https://github.com/dedomorozoff/qucs-mcp)
+[![License](https://img.shields.io/github/license/dedomorozoff/qucs-mcp)](https://github.com/dedomorozoff/qucs-mcp/blob/main/LICENSE)
 [![Last Commit](https://img.shields.io/github/last-commit/dedomorozoff/dmed)](https://github.com/dedomorozoff/qucs-mcp)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/dedomorozoff/qucs-mcp/total)
 An MCP server that builds Qucs-S schematics (`.sch`) from SPICE netlist
