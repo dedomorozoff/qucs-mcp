@@ -12,12 +12,16 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if hasFlag("-v", "--version") {
+		fmt.Println(cfg.ServerName, config.BuildInfo())
+		return
+	}
 	srv := server.NewServer(cfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	if !quiet() {
+	if !hasFlag("-q", "--quiet") {
 		fmt.Fprintf(os.Stderr, "%s %s ready (qucs-s: %s)\n", cfg.ServerName, cfg.ServerVersion, cfg.QucsExe())
 	}
 	if err := srv.Run(ctx); err != nil {
@@ -26,10 +30,12 @@ func main() {
 	}
 }
 
-func quiet() bool {
+func hasFlag(names ...string) bool {
 	for _, a := range os.Args[1:] {
-		if a == "-q" || a == "--quiet" {
-			return true
+		for _, n := range names {
+			if a == n {
+				return true
+			}
 		}
 	}
 	return false
