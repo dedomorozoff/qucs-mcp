@@ -4,9 +4,18 @@ name: Release
 #
 #   git tag -a v0.2.0 -m "coherent schematics" && git push origin v0.2.0
 #
+# Deleting a tag deletes the release that points at it, so a half-published
+# release cannot be repaired by moving the tag alone. The manual trigger
+# re-runs the same three jobs against an existing tag instead.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v* tag to publish
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
 
       - uses: actions/setup-go@v5
         with:
@@ -51,10 +62,18 @@ jobs:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
       CGO_ENABLED: '0'
-      VERSION: ${{ github.ref_name }}
-      COMMIT: ${{ github.sha }}
+      VERSION: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      # The stamp has to name the tagged commit, not the commit the run was
+      # started from: under workflow_dispatch those differ, and a binary
+      # that reports the wrong commit is worse than one that reports none.
+      - name: Resolve the commit to stamp
+        id: rev
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v5
         with:
@@ -62,6 +81,8 @@ jobs:
           cache: true
 
       - name: Build and package
+        env:
+          COMMIT: ${{ steps.rev.outputs.sha }}
         run: |
           stem="qucs-mcp-$VERSION-$GOOS-$GOARCH"
           bin=qucs-mcp
@@ -76,6 +97,10 @@ jobs:
               -X github.com/dedomorozoff/qucs-mcp/internal/config.commit=$COMMIT" \
             -o "stage/$stem/$bin" ./cmd/qucs-mcp
           cp README.md "stage/$stem/README.md"
+          # MIT requires the copyright notice to travel with the software,
+          # so the licence goes into every archive, not only into the
+          # repository.
+          cp LICENSE "stage/$stem/LICENSE"
           mkdir -p dist
           if [ "$ext" = zip ]; then
             (cd stage && zip -qrg "../dist/$stem.zip" "$stem")
@@ -99,7 +124,12 @@ jobs:
       # needed as well: the notes walk the log back to the previous tag.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
+
+      - name: Resolve the commit to publish
+        id: rev
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
         with:
@@ -114,7 +144,7 @@ jobs:
 
       - name: Release notes
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.tag || github.ref_name }}
         run: |
           # --generate-notes only lists merged pull requests, and this
           # repository is pushed to directly, so it wrote nothing but a
@@ -140,16 +170,28 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ github.ref_name }}
-          COMMIT: ${{ github.sha }}
+          VERSION: ${{ inputs.tag || github.ref_name }}
+          COMMIT: ${{ steps.rev.outputs.sha }}
         run: |
           # gh ships with the runner image, so publishing needs no
           # third-party action. Re-running a tag repairs that release in
           # place instead of failing on an existing one; the target moves
           # with it, so the notes and the assets describe the same commit.
+          test -s NOTES.md || { echo "NOTES.md is empty"; exit 1; }
           if gh release view "$VERSION" >/dev/null 2>&1; then
             gh release edit "$VERSION" --target "$COMMIT" --notes-file NOTES.md
             gh release upload "$VERSION" dist/* --clobber
           else
-            gh release create "$VERSION" --notes-file NOTES.md dist/*
+            gh release create "$VERSION" --target "$COMMIT" --notes-file NOTES.md dist/*
           fi
+          # A release whose binaries are missing looks complete from the
+          # workflow log, so check the published state itself: six archives
+          # plus the checksum file, or the job fails.
+          count=$(gh release view "$VERSION" --json assets -q '.assets | length')
+          want=$(printf '%s\n' dist/* | wc -l)
+          if [ "$count" -ne "$want" ]; then
+            echo "release carries $count assets, expected $want"
+            gh release view "$VERSION" --json assets -q '.assets[].name'
+            exit 1
+          fi
+          echo "published $VERSION at $COMMIT with $count assets"
