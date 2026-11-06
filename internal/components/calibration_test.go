@@ -1,13 +1,11 @@
 package components
 
 import (
-	"bufio"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/dedomorozoff/qucs-mcp/internal/qtest"
 	"github.com/dedomorozoff/qucs-mcp/internal/sch"
 )
 
@@ -37,10 +35,6 @@ func calProbe(dev sch.ComponentLine, p Pin) calStub {
 }
 
 func TestCalibrationAgainstQucsS(t *testing.T) {
-	exe := qucsExePath()
-	if exe == "" {
-		t.Skip("qucs-s.exe not installed")
-	}
 	dir := t.TempDir()
 
 	type devCase struct {
@@ -83,26 +77,9 @@ func TestCalibrationAgainstQucsS(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cir := filepath.Join(dir, "calibrate.cir")
-	cmd := exec.Command(exe, "-n", "--ngspice", "-i", "calibrate.sch", "-o", "calibrate.cir")
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("qucs-s -n failed: %v\n%s", err, out)
-	}
-	if _, statErr := os.Stat(cir); statErr != nil {
-		t.Fatalf("netlist file not created at %s", cir)
-	}
-
-	f, err := os.Open(cir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
 	lines := map[string][]string{}
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
+	for _, line := range strings.Split(qtest.Netlist(t, dir, "calibrate"), "\n") {
+		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "*") || strings.HasPrefix(line, ".") {
 			continue
 		}
@@ -132,29 +109,4 @@ func TestCalibrationAgainstQucsS(t *testing.T) {
 			}
 		}
 	}
-}
-
-func qucsExePath() string {
-	if env := os.Getenv("QUCS_S_ROOT"); env != "" {
-		return filepath.Join(env, "bin", "qucs-s.exe")
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	for {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-	p := filepath.Join(dir, "qucs", "bin", "qucs-s.exe")
-	if _, err := os.Stat(p); err != nil {
-		return ""
-	}
-	return p
 }

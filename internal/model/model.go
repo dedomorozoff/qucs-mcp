@@ -17,6 +17,11 @@ type Component struct {
 	Value string // "1k" (normalized) or raw SPICE source spec
 	Pins  []Pin  // ordered like the Qucs netlist expects
 	Props map[string]string
+	// ModelParams holds SPICE model-card and instance parameters by
+	// uppercased name ("BF" -> "150"), resolved from the .model line for
+	// Q/M devices and from trailing key=value tokens on the device line.
+	// Values are in Qucs suffix convention.
+	ModelParams map[string]string
 }
 
 // NetOf returns the net of the named pin or "".
@@ -40,7 +45,7 @@ type CircuitSpec struct {
 	Name       string
 	Components []Component
 	Analyses   []Analysis
-	Models     []string // raw .model lines (kept verbatim)
+	Models     []string // raw .model lines, directive dot included
 	Params     map[string]string
 	Includes   []string
 	Warnings   []string

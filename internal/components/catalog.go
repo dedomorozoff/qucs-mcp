@@ -321,7 +321,7 @@ func twoPin() []Pin { return []Pin{{Name: "1", DX: -30, DY: 0}, {Name: "2", DX: 
 func Supported(schType string) bool {
 	switch schType {
 	case "R", "C", "L", "S4Q_V", "S4Q_I", "GND", "DIODE_SPICE", "_BJT", "_MOSFET",
-		".AC", ".TR", ".DC", "SpicePar", "SpiceInclude":
+		".AC", ".TR", ".DC", "SpicePar", "SpiceInclude", "SpiceModel":
 		return true
 	}
 	return false

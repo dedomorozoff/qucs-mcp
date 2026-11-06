@@ -18,6 +18,7 @@ func Parse(text string) (*model.CircuitSpec, error) {
 	spec := &model.CircuitSpec{Params: map[string]string{}}
 	physical := splitLines(text)
 	merged := mergeContinuations(physical)
+	nets := &netNames{canon: map[string]string{}}
 
 	rawModels := make([]string, 0, 4)
 	seenRefs := map[string]struct{}{}
@@ -33,11 +34,14 @@ func Parse(text string) (*model.CircuitSpec, error) {
 			switch strings.ToLower(first) {
 			case ".end":
 				// silently ignored
-			case ".title", ".options", ".temp":
+			case ".title", ".options", ".temp", ".global", ".ic":
 				spec.Warnings = append(spec.Warnings,
 					fmt.Sprintf("line %d: %s accepted but not applied", ln, first))
 			case ".model":
-				rawModels = append(rawModels, strings.Join(toks[1:], " "))
+				// The whole directive is kept verbatim: qucs-s writes the
+				// SpiceModel property straight into the netlist, so the
+				// leading ".model" must stay in it.
+				rawModels = append(rawModels, strings.TrimSpace(m.text))
 			case ".param":
 				for _, kv := range toks[1:] {
 					k, v, found := strings.Cut(kv, "=")
@@ -66,7 +70,7 @@ func Parse(text string) (*model.CircuitSpec, error) {
 			continue
 		}
 
-		comp, err := parseDevice(toks, ln)
+		comp, err := parseDevice(toks, ln, nets)
 		if err != nil {
 			return nil, err
 		}
@@ -75,18 +79,17 @@ func Parse(text string) (*model.CircuitSpec, error) {
 			return nil, fmt.Errorf("line %d: duplicated device ref %s", ln, comp.Ref)
 		}
 		seenRefs[key] = struct{}{}
-		if warn, ok := comp.Props["_bulk_warn"]; ok {
-			spec.Warnings = append(spec.Warnings, fmt.Sprintf("line %d: %s", ln, warn))
-			delete(comp.Props, "_bulk_warn")
-		}
-		if warn, ok := comp.Props["_sub_warn"]; ok {
-			spec.Warnings = append(spec.Warnings, fmt.Sprintf("line %d: %s", ln, warn))
-			delete(comp.Props, "_sub_warn")
+		if w, ok := comp.Props[warnProp]; ok {
+			spec.Warnings = append(spec.Warnings, fmt.Sprintf("line %d: %s", ln, w))
+			delete(comp.Props, warnProp)
 		}
 		spec.Components = append(spec.Components, *comp)
 	}
 
-	applyModelFlavors(spec, rawModels)
+	for _, w := range nets.warnings {
+		spec.Warnings = append(spec.Warnings, w)
+	}
+	applyModels(spec, rawModels)
 	if spec.Name == "" {
 		spec.Name = "schematic"
 	}
@@ -103,11 +106,13 @@ func splitLines(text string) []string {
 	return strings.Split(text, "\n")
 }
 
+// mergeContinuations joins "+"-leading lines onto the preceding logical
+// line and drops inline ";" comments (SPICE end-of-line comment marker).
 func mergeContinuations(physical []string) []mergedLine {
 	res := make([]mergedLine, 0, len(physical))
 	var pending *mergedLine
 	for i, raw := range physical {
-		line := strings.TrimRight(raw, "\r")
+		line := stripComment(strings.TrimRight(raw, "\r"))
 		trim := strings.TrimSpace(line)
 		if strings.HasPrefix(trim, "+") {
 			if pending != nil {
@@ -119,6 +124,21 @@ func mergeContinuations(physical []string) []mergedLine {
 		pending = &res[len(res)-1]
 	}
 	return res
+}
+
+// stripComment removes a ";"-initiated end-of-line comment, honouring
+// double-quoted spans.
+func stripComment(l string) string {
+	inQuote := false
+	for i := 0; i < len(l); i++ {
+		switch {
+		case l[i] == '"':
+			inQuote = !inQuote
+		case l[i] == ';' && !inQuote:
+			return l[:i]
+		}
+	}
+	return l
 }
 
 func tokenize(l string) []string {
@@ -172,6 +192,10 @@ func parseAnalysis(dir string, toks []string, ln int) (*model.Analysis, error) {
 	return a, nil
 }
 
+// warnProp holds a one-line non-fatal note about a device, moved out of
+// the component and into the spec warnings by Parse.
+const warnProp = "_warn"
+
 // deviceSpec: device letters and required node counts.
 var deviceSpec = map[byte]struct {
 	catalog string
@@ -182,7 +206,7 @@ var deviceSpec = map[byte]struct {
 	'Q': {"_BJT", 3}, 'M': {"_MOSFET", 3},
 }
 
-func parseDevice(toks []string, ln int) (*model.Component, error) {
+func parseDevice(toks []string, ln int, nets *netNames) (*model.Component, error) {
 	name := toks[0]
 	if len(name) < 2 {
 		return nil, fmt.Errorf("line %d: device name too short: %q", ln, name)
@@ -199,31 +223,35 @@ func parseDevice(toks []string, ln int) (*model.Component, error) {
 		return nil, fmt.Errorf("line %d: %s expects at least %d nodes and a value", ln, name, d.nodes)
 	}
 	comp := &model.Component{
-		Ref:   name,
-		Type:  d.catalog,
-		Pins:  make([]model.Pin, 0, d.nodes),
-		Props: map[string]string{},
+		Ref:         name,
+		Type:        d.catalog,
+		Pins:        make([]model.Pin, 0, d.nodes),
+		Props:       map[string]string{},
+		ModelParams: map[string]string{},
 	}
-	nodes := toks[1 : 1+d.nodes]
+	nodes := make([]string, d.nodes)
+	for i, n := range toks[1 : 1+d.nodes] {
+		nodes[i] = nets.resolve(n, ln)
+	}
 	// Model index: SPICE allows a 4th net for M (bulk) and Q (substrate),
 	// so the model name may sit one token later. A trailing "=" in the
 	// candidate token means it's a KEY=VALUE parameter, not a net.
 	modelIdx := 1 + d.nodes
-	// 4-terminal MOSFET: drain gate source bulk — bulk merges into source
+	// 4-terminal MOSFET: drain gate source bulk — qucs-s has no bulk pin
+	// in this template, the bulk node is folded into the source.
 	if letter == 'M' && len(toks) >= 1+d.nodes+2 && !strings.Contains(toks[modelIdx+1], "=") {
 		bulk := toks[modelIdx]
-		src := nodes[d.nodes-1]
-		if bulk != src && bulk != "0" {
-			comp.Props["_bulk_warn"] = "MOSFET " + name + ": bulk net " + bulk + " merged into source " + src
+		if nets.resolve(bulk, ln) != nodes[len(nodes)-1] && bulk != "0" {
+			comp.Props[warnProp] = "MOSFET " + name + ": bulk net " + bulk +
+				" merged into source " + nodes[len(nodes)-1]
 		}
 		modelIdx++
 	}
-	// 5-token BJT (4 nets): c b e s — substrate merges into base
+	// 5-token BJT (4 nets): c b e s — substrate merged into base.
 	if letter == 'Q' && len(toks) >= 1+d.nodes+2 && !strings.Contains(toks[modelIdx+1], "=") {
 		sub := toks[modelIdx]
-		base := nodes[1]
-		if sub != base && sub != "0" {
-			comp.Props["_sub_warn"] = "BJT " + name + ": substrate net " + sub + " merged into base " + base
+		if nets.resolve(sub, ln) != nodes[1] && sub != "0" {
+			comp.Props[warnProp] = "BJT " + name + ": substrate net " + sub + " merged into base " + nodes[1]
 		}
 		modelIdx++
 	}
@@ -242,6 +270,15 @@ func parseDevice(toks []string, ln int) (*model.Component, error) {
 		comp.Value = toks[modelIdx] // model name
 	case 'Q', 'M':
 		comp.Value = toks[modelIdx] // model name; flavor resolved later
+	}
+	// Instance parameters: trailing KEY=VALUE tokens after the model name
+	// (M1 d g s 0 Mmod L=1u W=10u, Q1 c b e QM AREA=2, R1 a b 1k TC=...).
+	for _, kv := range toks[modelIdx+1:] {
+		k, v, found := strings.Cut(kv, "=")
+		if !found {
+			continue
+		}
+		comp.ModelParams[strings.ToUpper(k)] = NormalizeValue(v)
 	}
 	return comp, nil
 }
@@ -266,39 +303,173 @@ func upperByte(b byte) byte {
 	return b
 }
 
-// applyModelFlavors resolves BJT pnp/npn and MOSFET p/n channel from the
-// collected raw .model lines.
-func applyModelFlavors(spec *model.CircuitSpec, rawModels []string) {
-	spec.Models = rawModels
-	byName := map[string]string{}
-	for _, m := range rawModels {
-		fields := strings.Fields(m)
-		if len(fields) == 0 {
+// netNames canonicalizes SPICE node names.
+//
+// SPICE node names are case insensitive and Qucs-S resolves "gnd"
+// (any spelling) to node 0 while leaving the old name in the probe list,
+// which kills the simulation; characters outside [A-Za-z0-9_] survive the
+// netlist but disappear from the dataset, so both are normalized here and
+// reported once.
+type netNames struct {
+	canon    map[string]string // folded name -> canonical label
+	warnings []string
+}
+
+func (n *netNames) resolve(raw string, ln int) string {
+	if raw == "0" {
+		return "0"
+	}
+	key := strings.ToLower(raw)
+	if key == "gnd" {
+		return "0"
+	}
+	if disp, ok := n.canon[key]; ok {
+		return disp
+	}
+	clean := sanitizeNet(raw)
+	n.canon[key] = clean
+	if clean != raw {
+		n.warnings = append(n.warnings, fmt.Sprintf(
+			"line %d: net %q renamed to %q (node names keep only letters, digits and underscore)", ln, raw, clean))
+	}
+	return clean
+}
+
+func sanitizeNet(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' {
+			b.WriteByte(c)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	out := b.String()
+	if out == "" {
+		out = "n"
+	}
+	return out
+}
+
+// modelCard is one parsed .model directive.
+type modelCard struct {
+	name   string
+	kind   string
+	params map[string]string
+}
+
+// parseModelCard splits ".model NAME TYPE (params…)" text. The type word
+// is optional (`.model M 0 NCH VTO=.7 …`), parameter values may be
+// space separated inside parentheses and bare words are flags worth 1.
+func parseModelCard(text string) modelCard {
+	f := strings.Fields(text)
+	c := modelCard{name: "-", params: map[string]string{}}
+	if len(f) > 1 {
+		c.name = f[1]
+	}
+	for _, tok := range f[2:] {
+		// "D(IS=7n" — the type word is glued to the parameter list.
+		if i := strings.IndexByte(tok, '('); i > 0 {
+			if head := tok[:i]; isWord(head) && c.kind == "" {
+				c.kind = strings.ToUpper(head)
+			}
+			tok = tok[i+1:]
+			if tok == "" {
+				continue
+			}
+		}
+		tok = strings.Trim(tok, "()")
+		if tok == "" {
 			continue
 		}
-		byName[strings.ToLower(fields[0])] = strings.Join(fields[1:], " ")
+		if k, v, found := strings.Cut(tok, "="); found {
+			if k != "" {
+				c.params[strings.ToUpper(k)] = NormalizeValue(v)
+			}
+			continue
+		}
+		if isWord(tok) {
+			if c.kind == "" {
+				c.kind = strings.ToUpper(tok)
+				continue
+			}
+			c.params[strings.ToUpper(tok)] = "1" // bare flag
+		}
+	}
+	return c
+}
+
+func isWord(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_') {
+			return false
+		}
+	}
+	return s != ""
+}
+
+// applyModels resolves BJT pnp/npn and MOSFET p/n channel from the
+// collected .model lines and carries the card parameters into the
+// device, because qucs-s builds the transistor model from the component
+// properties, not from a named .model line.
+func applyModels(spec *model.CircuitSpec, rawModels []string) {
+	spec.Models = rawModels
+	cards := map[string]modelCard{}
+	for _, m := range rawModels {
+		c := parseModelCard(m)
+		cards[strings.ToLower(c.name)] = c
 	}
 	for i := range spec.Components {
 		c := &spec.Components[i]
+		if c.ModelParams == nil {
+			c.ModelParams = map[string]string{}
+		}
 		switch c.Type {
-		case "_BJT", "_MOSFET":
-			upper := strings.ToUpper(byName[strings.ToLower(c.Value)])
-			if c.Type == "_BJT" {
-				if strings.Contains(upper, "PNP") {
+		case "_BJT", "_MOSFET", "DIODE_SPICE":
+			c.Props["model"] = c.Value
+			card, found := cards[strings.ToLower(c.Value)]
+			if !found {
+				if len(spec.Includes) == 0 {
+					spec.Warnings = append(spec.Warnings, fmt.Sprintf(
+						"%s: model %q is not defined in the netlist text; the device has no model card",
+						c.Ref, c.Value))
+				}
+				continue
+			}
+			switch c.Type {
+			case "_BJT":
+				if strings.Contains(card.kind, "PNP") {
 					c.Props["flavor"] = "pnp"
 				} else {
 					c.Props["flavor"] = "npn"
 				}
-			} else {
-				if strings.Contains(upper, "PMOS") {
+			case "_MOSFET":
+				if isPChannel(card) {
 					c.Props["flavor"] = "pmos"
 				} else {
 					c.Props["flavor"] = "nmos"
 				}
+			default:
+				// Diodes are emitted by model name, qucs-s passes the card
+				// through, so nothing has to be copied into the component.
+				continue
 			}
-			c.Props["model"] = c.Value
-		case "DIODE_SPICE":
-			c.Props["model"] = c.Value
+			for k, v := range card.params {
+				if _, overridden := c.ModelParams[k]; !overridden {
+					c.ModelParams[k] = v
+				}
+			}
 		}
 	}
+}
+
+// isPChannel reports whether a MOSFET card is p-channel: the type word
+// (pmos/pfet) or the level-3 pchan flag.
+func isPChannel(card modelCard) bool {
+	if strings.Contains(card.kind, "PMOS") || strings.Contains(card.kind, "PFET") {
+		return true
+	}
+	return card.params["PCHAN"] == "1"
 }

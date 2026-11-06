@@ -2,22 +2,18 @@ package dataset
 
 import (
 	"math"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/dedomorozoff/qucs-mcp/internal/layout"
 	"github.com/dedomorozoff/qucs-mcp/internal/model"
+	"github.com/dedomorozoff/qucs-mcp/internal/qtest"
 )
 
 // TestRCSimulateIntegration generates RC low-pass, simulates it
-// headlessly and parses the resulting Qucs dataset. Requires qucs-s.exe.
+// headlessly and parses the resulting Qucs dataset. Skipped without
+// Qucs-S.
 func TestRCSimulateIntegration(t *testing.T) {
-	exe := qucsExe()
-	if exe == "" {
-		t.Skip("qucs-s.exe not installed")
-	}
 	spec := &model.CircuitSpec{
 		Name: "rclow",
 		Components: []model.Component{
@@ -44,18 +40,8 @@ func TestRCSimulateIntegration(t *testing.T) {
 	if err := doc.WriteTo(schPath); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(exe, "-n", "--ngspice", "--run", "-i", "rclow.sch", "-o", "rclow.dat")
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("simulate failed: %v\n%s", err, out)
-	}
-	datPath := filepath.Join(dir, "rclow.dat")
-	raw, rerr := os.ReadFile(datPath)
-	if rerr != nil {
-		t.Fatalf("no dataset produced: %v\n%s", rerr, out)
-	}
-	d, err := Parse(string(raw))
+	dat := qtest.Simulate(t, dir, "rclow")
+	d, err := Parse(dat)
 	if err != nil {
 		t.Fatalf("parse dataset: %v", err)
 	}
@@ -66,10 +52,10 @@ func TestRCSimulateIntegration(t *testing.T) {
 	}
 	vout, ok := d.Var("ac.v(out)")
 	if !ok {
-		t.Fatalf("ac.v(out) missing; vars = %+v", names(d))
+		t.Fatalf("ac.v(out) missing; vars = %v", d.VarNames())
 	}
 	if _, ok := d.Var("ac.v(in)"); !ok {
-		t.Fatalf("ac.v(in) missing; vars = %+v", names(d))
+		t.Fatalf("ac.v(in) missing; vars = %v", d.VarNames())
 	}
 	if len(vout.Values) != len(indep.Values) {
 		t.Fatalf("vout %d points vs indep %d", len(vout.Values), len(indep.Values))
@@ -93,37 +79,4 @@ func TestRCSimulateIntegration(t *testing.T) {
 	if real(v0) < 0.9 || real(v0) > 1.01 {
 		t.Fatalf("v(out) at f0 = %v, want ~0.998", v0)
 	}
-}
-
-func names(d *Dataset) []string {
-	out := make([]string, 0, len(d.Vars))
-	for _, s := range d.Vars {
-		out = append(out, s.Name)
-	}
-	return out
-}
-
-func qucsExe() string {
-	if env := os.Getenv("QUCS_S_ROOT"); env != "" {
-		return filepath.Join(env, "bin", "qucs-s.exe")
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	for {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-	p := filepath.Join(dir, "qucs", "bin", "qucs-s.exe")
-	if _, statErr := os.Stat(p); statErr != nil {
-		return ""
-	}
-	return p
 }

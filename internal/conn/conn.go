@@ -85,8 +85,8 @@ func Rebuild(rd *sch.ReadDocument, name string) (*model.CircuitSpec, []string) {
 		if c.Ref != "*" { // GND placeholders are all "*" by convention
 			dupRefs[c.Ref]++
 		}
-		if !components.Supported(c.Type) || c.Type == "GND" {
-			if c.Type != "GND" && !directive(c.Type) {
+		if c.Type == "GND" || directive(c.Type) || !components.Supported(c.Type) {
+			if c.Type != "GND" && !directive(c.Type) && !components.Supported(c.Type) {
 				warnings = append(warnings, fmt.Sprintf(
 					"component %s has unsupported type %s (skipped)", c.Ref, c.Type))
 			}

@@ -16,6 +16,7 @@ package layout
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -118,6 +119,7 @@ func BuildPlaced(spec *model.CircuitSpec, pl Placements) (*sch.Document, error) 
 		default:
 			return nil, fmt.Errorf("unsupported component type %q (ref %s)", c.Type, c.Ref)
 		}
+		applyModelParams(doc, &line, c)
 		doc.AddComponent(line)
 		addPinStubs(doc, c, line.X, line.Y)
 	}
@@ -179,6 +181,29 @@ func sign(v int) int {
 	return 0
 }
 
+// applyModelParams rewrites a transistor property body from the SPICE
+// model card and instance parameters. qucs-s does not bind _BJT/_MOSFET
+// to a named .model: it generates QMOD_<ref>/MMOD_<ref> from the body, so
+// without this the device would silently run on built-in defaults.
+func applyModelParams(doc *sch.Document, line *sch.ComponentLine, c *model.Component) {
+	modelSlots, instanceSlots := components.ModelSlotTable(c.Type)
+	if modelSlots == nil && instanceSlots == nil {
+		return
+	}
+	if len(c.ModelParams) == 0 {
+		return
+	}
+	values := make(map[string]string, len(c.ModelParams))
+	for k, v := range c.ModelParams {
+		values[k] = neutralNumber(v)
+	}
+	var ignored []string
+	line.Body, ignored = components.ApplyParams(line.Body, modelSlots, instanceSlots, values)
+	for _, p := range ignored {
+		doc.SetRemark(fmt.Sprintf("%s: parameter %s has no Qucs-S property slot and is dropped", c.Ref, p))
+	}
+}
+
 // addAnalyses maps parsed analyses to Qucs simulation blocks. All
 // analysis blocks share one vertical stack below the circuit.
 func addAnalyses(doc *sch.Document, spec *model.CircuitSpec) error {
@@ -187,14 +212,22 @@ func addAnalyses(doc *sch.Document, spec *model.CircuitSpec) error {
 		stack++
 		return yAnalys + 80*(stack-1)
 	}
+	if len(spec.Analyses) == 0 {
+		// A schematic without a simulation block cannot be run at all
+		// (qucs-s answers "Ngspice timed out or start error!"), so a plain
+		// operating point is the safe default for DC-only netlists.
+		doc.AddComponent(components.DCOrOp("DC1", 40, nextY()))
+		doc.SetRemark("no analysis directive in the netlist; added a DC operating point")
+		return nil
+	}
 	for _, a := range spec.Analyses {
 		switch a.Type {
 		case "op", "dc":
 			doc.AddComponent(components.DCOrOp(fmt.Sprintf("DC%d", stack+1), 40, nextY()))
 			if a.Type == "dc" && a.Params["src"] != "" {
-				// spice-mode .DC runs as .OP; sweep parameters cannot be
-				// represented in this MVP block.
-				doc.SetRemark(fmt.Sprintf(".dc sweep of %s is not carried into the schematic (MVP: plain OP)", a.Params["src"]))
+				// spice-mode qucs-s has no sweep variables in the .DC
+				// block, so the simulation runs a single operating point.
+				doc.SetRemark(fmt.Sprintf(".dc sweep of %s is not supported in Qucs-S spice mode: the schematic runs a plain operating point (one point, no sweep)", a.Params["src"]))
 			}
 		case "ac":
 			sweep := strings.ToLower(a.Params["sweep"])
@@ -291,14 +324,38 @@ func tranPoints(start, stop, step string) (int, error) {
 // suffix-free scientific form that travels through spice4qucs into
 // ngspice unchanged ("1M" → "1e+06"). Unparseable text is returned
 // untouched (Build validates numeric fields where they matter).
+//
+// Values are printed with the shortest round-tripping digits, but the
+// binary product of a multiplier introduces noise beyond SPICE precision
+// (110u → 0.00010999999999999999), so anything longer than 12 significant
+// digits is reprinted at that precision.
 func neutralNumber(s string) string {
 	if s == "" {
 		return s
 	}
-	if v, ok := parseQucsNumber(s); ok {
-		return strconv.FormatFloat(v, 'g', -1, 64)
+	v, ok := parseQucsNumber(s)
+	if !ok {
+		return s
 	}
-	return s
+	out := strconv.FormatFloat(v, 'g', -1, 64)
+	if sigDigits(out) > 12 {
+		out = strconv.FormatFloat(v, 'g', 12, 64)
+	}
+	return out
+}
+
+// sigDigits counts the mantissa digits of a scientific-form literal.
+func sigDigits(s string) int {
+	if i := strings.IndexAny(s, "eE"); i >= 0 {
+		s = s[:i]
+	}
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] >= '0' && s[i] <= '9' {
+			n++
+		}
+	}
+	return n
 }
 
 func orzero(s string) string {
@@ -365,17 +422,20 @@ func parseQucsNumber(s string) (float64, bool) {
 	return num, true
 }
 
-// addDirectives renders .param/.include/.model blocks.
+// addDirectives renders .param/.include/.model blocks. Parameter names
+// are sorted so regenerating a schematic is byte-for-byte stable.
 func addDirectives(doc *sch.Document, spec *model.CircuitSpec) error {
-	n := 0
-	for k, v := range spec.Params {
-		n++
-		doc.AddComponent(components.SpicePar(fmt.Sprintf("SpicePar%d", n), 300, yDirect+60*n,
-			map[string]string{k: v}))
+	keys := make([]string, 0, len(spec.Params))
+	for k := range spec.Params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i, k := range keys {
+		doc.AddComponent(components.SpicePar(fmt.Sprintf("SpicePar%d", i+1), 300, yDirect+60*(i+1),
+			map[string]string{k: spec.Params[k]}))
 	}
 	for i, model := range spec.Models {
-		n++
-		doc.AddComponent(components.SpiceModel(fmt.Sprintf("SpiceModel%d", n), 520, yModels+60*(i+1), model))
+		doc.AddComponent(components.SpiceModel(fmt.Sprintf("SpiceModel%d", i+1), 520, yModels+60*(i+1), model))
 	}
 	if len(spec.Includes) > 0 {
 		doc.AddComponent(components.SpiceInclude("SpiceInclude1", 760, yInclude, spec.Includes...))

@@ -454,6 +454,14 @@ func (s *Server) simulate(ctx context.Context, schPath string, timeout time.Dura
 	if perr != nil {
 		return &simOut{Path: datPath, OK: false}, fmt.Errorf("parse dataset: %w", perr)
 	}
+	if !d.HasResults() {
+		return &simOut{
+			Path:   datPath,
+			OK:     false,
+			Stdout: tail(res.Stdout),
+			Stderr: tail(res.Stderr),
+		}, fmt.Errorf("simulation wrote no results (dataset variables: %v); ngspice aborted or found no model — check the warnings and the .cir netlist", d.VarNames())
+	}
 	out := &simOut{Path: datPath, OK: true}
 	for _, v := range d.Vars {
 		sv := simVar{Name: v.Name, Indep: v.Indep, Points: len(v.Values)}
@@ -537,7 +545,7 @@ type compEntry struct {
 }
 
 var catalogOrder = []string{"R", "C", "L", "S4Q_V", "S4Q_I", "DIODE_SPICE", "_BJT", "_MOSFET", "GND",
-	".AC", ".TR", ".DC", "SpicePar", "SpiceInclude"}
+	".AC", ".TR", ".DC", "SpicePar", "SpiceInclude", "SpiceModel"}
 
 var typeShort = map[string]string{
 	"R": "Resistor", "C": "Capacitor", "L": "Inductor",
@@ -546,6 +554,7 @@ var typeShort = map[string]string{
 	"GND": "Ground symbol (SPICE node 0)",
 	".AC": "AC frequency sweep", ".TR": "Transient analysis", ".DC": "DC operating point",
 	"SpicePar": ".param block", "SpiceInclude": ".include block",
+	"SpiceModel": ".model card passed to the simulator verbatim",
 }
 
 func (s *Server) handleListComponents(_ context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, listOut, error) {

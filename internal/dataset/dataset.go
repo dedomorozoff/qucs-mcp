@@ -41,6 +41,28 @@ func (d *Dataset) Var(name string) (Series, bool) {
 	return Series{}, false
 }
 
+// HasResults reports whether the dataset holds anything besides the
+// sweep axis. ngspice aborting midway (an undefined model, a bad .model
+// line) still leaves a .dat with the axis or nothing at all, and qucs-s
+// exits 0 — callers must not read that as a successful simulation.
+func (d *Dataset) HasResults() bool {
+	for _, s := range d.Vars {
+		if s.Name != "frequency" && s.Name != "time" {
+			return true
+		}
+	}
+	return false
+}
+
+// VarNames lists the variable names in file order.
+func (d *Dataset) VarNames() []string {
+	out := make([]string, 0, len(d.Vars))
+	for _, s := range d.Vars {
+		out = append(out, s.Name)
+	}
+	return out
+}
+
 // Parse reads a Qucs dataset from text.
 func Parse(text string) (*Dataset, error) {
 	d := &Dataset{}

@@ -1,8 +1,6 @@
 package validate
 
 import (
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -10,17 +8,15 @@ import (
 	"github.com/dedomorozoff/qucs-mcp/internal/layout"
 	"github.com/dedomorozoff/qucs-mcp/internal/model"
 	"github.com/dedomorozoff/qucs-mcp/internal/netlist"
+	"github.com/dedomorozoff/qucs-mcp/internal/qtest"
 )
 
-// TestRCIntegration runs the full pipeline against the installed
-// Qucs-S: SPICE text → model → layout → .sch → netlist → compare.
-// Skipped when qucs-s.exe is not available.
+// TestRCIntegration runs the pipeline against the installed Qucs-S:
+// SPICE text → model → layout → .sch → netlist → compare. It builds the
+// model by hand rather than through internal/spice, so a parser
+// regression cannot hide a validation regression. Skipped when Qucs-S is
+// not installed.
 func TestRCIntegration(t *testing.T) {
-	exe := qucsExe()
-	if exe == "" {
-		t.Skip("qucs-s.exe not installed")
-	}
-
 	spec := &model.CircuitSpec{
 		Name: "rclow",
 		Components: []model.Component{
@@ -44,27 +40,16 @@ func TestRCIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
-	schPath := filepath.Join(dir, "rclow.sch")
-	if err := doc.WriteTo(schPath); err != nil {
+	if err := doc.WriteTo(filepath.Join(dir, "rclow.sch")); err != nil {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(exe, "-n", "--ngspice", "-i", "rclow.sch", "-o", "rclow.cir")
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("qucs-s -n failed: %v\n%s", err, out)
-	}
-	cirPath := filepath.Join(dir, "rclow.cir")
-	if _, statErr := os.Stat(cirPath); statErr != nil {
-		t.Fatalf("netlist not produced: %s", schPath)
-	}
+	cir := qtest.Netlist(t, dir, "rclow")
 
 	// netlist row sanity checks
-	cir, _ := os.ReadFile(cirPath)
 	for _, want := range []string{"R1 in out", "C1 out 0"} {
 		found := false
-		for _, line := range strings.Split(string(cir), "\n") {
+		for _, line := range strings.Split(cir, "\n") {
 			trimmed := strings.Fields(strings.TrimSpace(line))
 			if len(trimmed) >= 4 && trimmed[0] == strings.Fields(want)[0] &&
 				trimmed[1] == strings.Fields(want)[1] && trimmed[2] == strings.Fields(want)[2] {
@@ -76,7 +61,7 @@ func TestRCIntegration(t *testing.T) {
 		}
 	}
 
-	actual, err := netlist.Parse(string(cir))
+	actual, err := netlist.Parse(cir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,29 +72,4 @@ func TestRCIntegration(t *testing.T) {
 	if len(rep.Pins) != 6 {
 		t.Fatalf("pins checked = %d, want 6", len(rep.Pins))
 	}
-}
-
-func qucsExe() string {
-	if env := os.Getenv("QUCS_S_ROOT"); env != "" {
-		return filepath.Join(env, "bin", "qucs-s.exe")
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	for {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-	p := filepath.Join(dir, "qucs", "bin", "qucs-s.exe")
-	if _, err := os.Stat(p); err != nil {
-		return ""
-	}
-	return p
 }
