@@ -5,3 +5,15 @@ qucs/
 *.dat
 *.plot
 .claude/
+
+# Generated netlists from headless qucs-s runs
+*.cir
+
+# Local CLI permission settings, per-machine
+.qoder/settings.local.json
+
+# Local build output; release binaries come from CI
+bin/
+
+# Agentic tool state (session ledgers, not project docs)
+.superpowers/

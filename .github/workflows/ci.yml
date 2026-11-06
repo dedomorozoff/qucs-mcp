@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check gofmt
+        shell: bash
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "run gofmt -w on:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      # The Qucs-S dependent tests (internal/e2e, internal/validate,
+      # internal/dataset, internal/server, internal/components) skip
+      # themselves when no qucs-s binary is installed, so this run is the
+      # pure-Go gate. To exercise them, add a self-hosted runner with
+      # Qucs-S and set QUCS_S_ROOT.
+      - name: Test
+        run: go test -timeout 300s ./...
+
+  binaries:
+    name: build ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            exe: .exe
+          - goos: linux
+            goarch: amd64
+            exe: ''
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: >-
+          go build -trimpath -ldflags='-s -w'
+          -o dist/qucs-mcp${{ matrix.exe }} ./cmd/qucs-mcp
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qucs-mcp-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/qucs-mcp${{ matrix.exe }}
