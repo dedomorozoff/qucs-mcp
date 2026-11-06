@@ -95,8 +95,11 @@ jobs:
     steps:
       # gh resolves the repository and the note's compare base from git, so
       # publishing has to run inside a checkout; without it gh fails with
-      # "not a git repository" before it reaches the API.
+      # "not a git repository" before it reaches the API. Full history is
+      # needed as well: the notes walk the log back to the previous tag.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
@@ -109,11 +112,44 @@ jobs:
           sha256sum -- qucs-mcp-* > SHA256SUMS
           cat SHA256SUMS
 
-      # gh ships with the runner image, so publishing needs no third-party
-      # action; --generate-notes writes the body from the PRs merged since
-      # the previous tag.
+      - name: Release notes
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          # --generate-notes only lists merged pull requests, and this
+          # repository is pushed to directly, so it wrote nothing but a
+          # changelog link. Compose the body from the commit log instead.
+          prev=$(git tag --sort=-creatordate --merged "$(git rev-list -n1 "$VERSION")" \
+            | grep -v "^$VERSION$" | head -1 || true)
+          if [ -n "$prev" ]; then range="$prev..$VERSION"; else range="$VERSION"; fi
+          {
+            echo "MCP server that turns SPICE text into Qucs-S schematics and runs"
+            echo "them through ngspice. It drives the local \`qucs-s\` binary, so Qucs-S"
+            echo "has to be installed separately; set \`QUCS_S_ROOT\` unless \`qucs-s\` is"
+            echo "already on \`PATH\`. Unpack the archive for your platform and point the"
+            echo "MCP client at the binary inside; \`SHA256SUMS\` covers every file here."
+            echo
+            echo "\`qucs-mcp --version\` reports this tag and the commit it was built from."
+            echo
+            echo "## Changes"
+            echo
+            git log --no-merges --pretty='- %s' "$range"
+          } > NOTES.md
+          cat NOTES.md
+
       - name: Publish
-        run: gh release create "$VERSION" --generate-notes dist/*
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          # gh ships with the runner image, so publishing needs no
+          # third-party action. Re-running a tag repairs that release in
+          # place instead of failing on an existing one; the target moves
+          # with it, so the notes and the assets describe the same commit.
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release edit "$VERSION" --target "$COMMIT" --notes-file NOTES.md
+            gh release upload "$VERSION" dist/* --clobber
+          else
+            gh release create "$VERSION" --notes-file NOTES.md dist/*
+          fi
