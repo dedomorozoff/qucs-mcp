@@ -45,11 +45,12 @@ func (s *Server) Tools() []*mcp.Tool { return s.tools }
 func (s *Server) MCP() *mcp.Server { return s.mcp }
 
 type doctorOut struct {
-	QucsRoot  string `json:"qucs_root" jsonschema:"Qucs-S installation root"`
-	QucsExe   string `json:"qucs_exe" jsonschema:"Path of the qucs-s.exe binary"`
-	QucsFound bool   `json:"qucs_found" jsonschema:"true if qucs-s.exe exists"`
-	WorkDir   string `json:"work_dir" jsonschema:"Directory for generated files"`
-	TimeoutS  int    `json:"timeout_s" jsonschema:"Subprocess timeout in seconds"`
+	QucsRoot  string   `json:"qucs_root" jsonschema:"Qucs-S installation root"`
+	QucsExe   string   `json:"qucs_exe" jsonschema:"Path of the qucs-s binary"`
+	QucsFound bool     `json:"qucs_found" jsonschema:"true if the qucs-s binary exists"`
+	WorkDir   string   `json:"work_dir" jsonschema:"Directory for generated files"`
+	TimeoutS  int      `json:"timeout_s" jsonschema:"Subprocess timeout in seconds"`
+	Searched  []string `json:"searched,omitempty" jsonschema:"Locations probed for a Qucs-S installation"`
 }
 
 func (s *Server) registerDoctor() {
@@ -66,17 +67,33 @@ func (s *Server) registerDoctor() {
 			QucsExe:  s.cfg.QucsExe(),
 			WorkDir:  s.cfg.WorkDir,
 			TimeoutS: int(s.cfg.Timeout / 1e9),
+			Searched: s.cfg.Searched,
 		}
-		if _, err := os.Stat(s.cfg.QucsExe()); err == nil {
-			out.QucsFound = true
-		} else {
-			return nil, out, fmt.Errorf("qucs-s.exe not found at %s (set QUCS_S_ROOT): %w", s.cfg.QucsExe(), err)
+		if out.QucsExe == "" {
+			return nil, out, fmt.Errorf(
+				"no Qucs-S installation found; looked in: %s. Set QUCS_S_ROOT to the directory that contains bin/qucs-s.exe",
+				joinList(s.cfg.Searched))
 		}
+		if _, err := os.Stat(out.QucsExe); err != nil {
+			return nil, out, fmt.Errorf("qucs-s binary not found at %s: %w", out.QucsExe, err)
+		}
+		out.QucsFound = true
 		if err := os.MkdirAll(s.cfg.WorkDir, 0o755); err != nil {
 			return nil, out, fmt.Errorf("work dir %s unusable: %w", s.cfg.WorkDir, err)
 		}
 		return nil, out, nil
 	})
+}
+
+func joinList(l []string) string {
+	if len(l) == 0 {
+		return "<nothing>"
+	}
+	out := l[0]
+	for _, s := range l[1:] {
+		out += ", " + s
+	}
+	return out
 }
 
 // Run serves the MCP protocol over stdio until ctx is cancelled.
