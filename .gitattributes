@@ -1,0 +1,20 @@
+# The Windows CI runner checks out with core.autocrlf=true, and gofmt
+# reports every CRLF file as unformatted, so the gofmt gate failed on
+# windows-latest while passing on ubuntu with identical blobs. Text files
+# are LF in the repository and in every checkout, on every platform.
+* text=auto eol=lf
+
+# Line endings in these would break the tools that read them.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+*.exe  binary
+*.dll  binary
+*.zip  binary
+*.gz   binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
