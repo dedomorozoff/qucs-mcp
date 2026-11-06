@@ -97,6 +97,7 @@ jobs:
               -X github.com/dedomorozoff/qucs-mcp/internal/config.commit=$COMMIT" \
             -o "stage/$stem/$bin" ./cmd/qucs-mcp
           cp README.md "stage/$stem/README.md"
+          cp CHANGELOG.md "stage/$stem/CHANGELOG.md"
           # MIT requires the copyright notice to travel with the software,
           # so the licence goes into every archive, not only into the
           # repository.
@@ -168,6 +169,9 @@ jobs:
             echo "## Changes"
             echo
             git log --no-merges --pretty='- %s' "$range"
+            echo
+            echo "What has been published so far:"
+            echo "https://github.com/$GITHUB_REPOSITORY/blob/main/CHANGELOG.md"
           } > NOTES.md
           cat NOTES.md
 

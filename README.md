@@ -179,9 +179,9 @@ skip and the unit suite still gates the merge.
 
 `.github/workflows/release.yml` runs on a `v*` tag: it cross-compiles
 windows/linux/darwin × amd64/arm64, packs each into
-`qucs-mcp-<tag>-<os>-<arch>.(zip|tar.gz)` next to a copy of this README
-and the licence file, writes `SHA256SUMS` and publishes a GitHub Release
-whose notes are the commit log since the previous tag.
+`qucs-mcp-<tag>-<os>-<arch>.(zip|tar.gz)` next to a copy of this README,
+the change log and the licence file, writes `SHA256SUMS` and publishes a
+GitHub Release whose notes are the commit log since the previous tag.
 Version and commit are stamped into the binary with `-ldflags -X`, so a
 downloaded build reports the tag it came from. The release body is written
 to `NOTES.md` from the commit log and passed with `--notes-file`;
