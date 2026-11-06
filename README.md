@@ -2,8 +2,9 @@
 ![GitHub Release](https://img.shields.io/github/v/release/dedomorozoff/qucs-mcp)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/dedomorozoff/qucs-mcp)](https://github.com/dedomorozoff/qucs-mcp)
 [![License](https://img.shields.io/github/license/dedomorozoff/qucs-mcp)](https://github.com/dedomorozoff/qucs-mcp/blob/main/LICENSE)
-[![Last Commit](https://img.shields.io/github/last-commit/dedomorozoff/dmed)](https://github.com/dedomorozoff/qucs-mcp)
+[![Last Commit](https://img.shields.io/github/last-commit/dedomorozoff/qucs-mcp)](https://github.com/dedomorozoff/qucs-mcp/commits/main)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/dedomorozoff/qucs-mcp/total)
+
 An MCP server that builds Qucs-S schematics (`.sch`) from SPICE netlist
 text, validates them against the netlist Qucs-S itself generates, and runs
 the simulation. Fully headless — `qucs-s` is used as a subprocess only.
@@ -178,8 +179,9 @@ skip and the unit suite still gates the merge.
 
 `.github/workflows/release.yml` runs on a `v*` tag: it cross-compiles
 windows/linux/darwin × amd64/arm64, packs each into
-`qucs-mcp-<tag>-<os>-<arch>.(zip|tar.gz)` next to a copy of this README,
-writes `SHA256SUMS` and publishes a GitHub Release with generated notes.
+`qucs-mcp-<tag>-<os>-<arch>.(zip|tar.gz)` next to a copy of this README
+and the licence file, writes `SHA256SUMS` and publishes a GitHub Release
+whose notes are the commit log since the previous tag.
 Version and commit are stamped into the binary with `-ldflags -X`, so a
 downloaded build reports the tag it came from.
 
@@ -192,6 +194,16 @@ job (gofmt, vet, build, test) gates the packaging. The Qucs-S integration
 tests still skip on a runner without Qucs-S, so the numeric behaviour
 remains gated by CI on a runner where `QUCS_S_ROOT` points at a real
 installation.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
+
+Qucs-S is GPL-2.0-or-later. This server is a separate program: it starts
+the `qucs-s` binary from the installation on your machine as a subprocess
+and reads the files that installation writes, so no Qucs-S code, binary or
+share directory is bundled, copied into the sources or distributed in the
+release archives. Install Qucs-S separately, under its own terms.
 
 ## Russian documentation
 
