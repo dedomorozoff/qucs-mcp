@@ -152,6 +152,10 @@ jobs:
           prev=$(git tag --sort=-creatordate --merged "$(git rev-list -n1 "$VERSION")" \
             | grep -v "^$VERSION$" | head -1 || true)
           if [ -n "$prev" ]; then range="$prev..$VERSION"; else range="$VERSION"; fi
+          # Two tags on one commit — which is what re-cutting a tag leaves
+          # behind — make the range empty; fall back to the whole history
+          # rather than printing a heading over nothing.
+          if [ -z "$(git log --oneline "$range")" ]; then range="$VERSION"; fi
           {
             echo "MCP server that turns SPICE text into Qucs-S schematics and runs"
             echo "them through ngspice. It drives the local \`qucs-s\` binary, so Qucs-S"

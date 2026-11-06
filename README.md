@@ -183,7 +183,10 @@ windows/linux/darwin × amd64/arm64, packs each into
 and the licence file, writes `SHA256SUMS` and publishes a GitHub Release
 whose notes are the commit log since the previous tag.
 Version and commit are stamped into the binary with `-ldflags -X`, so a
-downloaded build reports the tag it came from.
+downloaded build reports the tag it came from. The release body is written
+to `NOTES.md` from the commit log and passed with `--notes-file`;
+[CHANGELOG.md](CHANGELOG.md) keeps the shorter record of what was actually
+published.
 
 ```sh
 git tag -a v0.2.0 -m "coherent schematics" && git push origin v0.2.0
