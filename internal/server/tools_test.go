@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -15,38 +16,9 @@ import (
 	"time"
 
 	"github.com/dedomorozoff/qucs-mcp/internal/config"
+	"github.com/dedomorozoff/qucs-mcp/internal/qtest"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-// qucsExe reports whether the bundled Qucs-S install is available.
-func qucsExe() string {
-	if env := os.Getenv("QUCS_S_ROOT"); env != "" {
-		p := filepath.Join(env, "bin", "qucs-s.exe")
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-		return ""
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	for {
-		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
-			break
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-	p := filepath.Join(dir, "qucs", "bin", "qucs-s.exe")
-	if _, statErr := os.Stat(p); statErr != nil {
-		return ""
-	}
-	return p
-}
 
 const rcNetlist = `* RC low-pass
 V1 in 0 DC 0 AC 1
@@ -90,10 +62,20 @@ func call[In any, Out any](t *testing.T, sess *mcp.ClientSession, name string, i
 
 func newWorkingServer(t *testing.T) *mcp.ClientSession {
 	t.Helper()
-	exe := qucsExe()
+	return newWorkingServerSet(t, 1)[0]
+}
+
+// newWorkingServerSet starts one server with n client sessions on it, so a
+// test can issue concurrent tool calls the way two MCP clients would.
+func newWorkingServerSet(t *testing.T, n int) []*mcp.ClientSession {
+	t.Helper()
+	exe := qtest.Binary()
 	if exe == "" {
-		t.Skip("qucs-s.exe not installed")
+		t.Skip("Qucs-S not installed")
 	}
+	// The tools below drive qucs-s through the server's own runner, so the
+	// cross-process lock has to be taken here rather than in qtest.run.
+	qtest.Exclusive(t)
 	cfg := config.Config{
 		QucsRoot:      filepath.Dir(filepath.Dir(exe)),
 		WorkDir:       t.TempDir(),
@@ -102,18 +84,23 @@ func newWorkingServer(t *testing.T) *mcp.ClientSession {
 		ServerVersion: "0.0.0",
 	}
 	srv := NewServer(cfg)
-	c := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	clientTransport, serverTransport := mcp.NewInMemoryTransports()
-	if _, err := srv.MCP().Connect(ctx, serverTransport, nil); err != nil {
-		t.Fatal(err)
+	t.Cleanup(cancel)
+	var sessions []*mcp.ClientSession
+	for i := range n {
+		c := mcp.NewClient(&mcp.Implementation{Name: fmt.Sprintf("qucs-mcp-test-%d", i), Version: "0"}, nil)
+		clientTransport, serverTransport := mcp.NewInMemoryTransports()
+		if _, err := srv.MCP().Connect(ctx, serverTransport, nil); err != nil {
+			t.Fatal(err)
+		}
+		sess, err := c.Connect(ctx, clientTransport, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = sess.Close() })
+		sessions = append(sessions, sess)
 	}
-	sess, err := c.Connect(ctx, clientTransport, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = sess.Close(); cancel() })
-	return sess
+	return sessions
 }
 
 type rcCreateOut struct {

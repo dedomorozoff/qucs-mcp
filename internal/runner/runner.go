@@ -8,8 +8,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 )
+
+// qucsS serializes headless runs inside this process. Two overlapping
+// qucs-s invocations pick up each other's intermediate ngspice deck and
+// write one circuit's results into the other's dataset — measured on
+// Qucs-S 26.1.1, where concurrent `--run` calls produced a dataset with
+// the requesting schematic's analysis and a different schematic's node
+// names. Silent, wrong numbers are exactly what this server must not
+// hand back, so runs never overlap.
+var qucsS sync.Mutex
 
 // Runner invokes the headless qucs-s.exe subprocess.
 type Runner struct {
@@ -48,6 +58,13 @@ func (r *Result) Errorf(format string, args ...any) error {
 // error: callers interpret the captured output. Exceeding the timeout is
 // a context.DeadlineExceeded error.
 func (r Runner) Run(ctx context.Context, args []string, dir string) (*Result, error) {
+	// Wait for the previous run outside the timeout budget: queueing is
+	// normal, not a sign that this simulation is slow.
+	if err := acquireQucs(ctx); err != nil {
+		return nil, err
+	}
+	defer qucsS.Unlock()
+
 	if r.Timeout <= 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 2*time.Minute)
@@ -115,6 +132,19 @@ func (r Runner) Netlist(ctx context.Context, sch, cir string) (*Result, error) {
 func (r Runner) Simulate(ctx context.Context, sch, dat string) (*Result, error) {
 	dir := filepath.Dir(sch)
 	return r.Run(ctx, r.SimulateArgs(filepath.Base(sch), filepath.Base(dat)), dir)
+}
+
+// acquireQucs takes the run lock, giving up if ctx is cancelled while the
+// caller queues behind another simulation.
+func acquireQucs(ctx context.Context) error {
+	for !qucsS.TryLock() {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("%w: another qucs-s run is still in progress", ctx.Err())
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	return nil
 }
 
 func exitCode(cmd *exec.Cmd) (int, error) {
