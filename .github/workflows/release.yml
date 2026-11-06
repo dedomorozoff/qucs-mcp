@@ -93,6 +93,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
+      # gh resolves the repository and the note's compare base from git, so
+      # publishing has to run inside a checkout; without it gh fails with
+      # "not a git repository" before it reaches the API.
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
