@@ -85,8 +85,15 @@ func TestBuildersRender(t *testing.T) {
 		t.Fatalf("R render = %q", r.Render())
 	}
 	rv := R("R1", 100, 100, "1k", true)
-	if !strings.Contains(rv.Render(), `1 100 100 -26 15 3 0`) {
+	if !strings.Contains(rv.Render(), `1 100 100 -26 15 0 3`) {
 		t.Fatalf("R vertical render = %q", rv.Render())
+	}
+	// sources go vertical with Rot=1 (pin1 top), diodes with Rot=3
+	if !strings.Contains(S4QV("V1", 0, 0, "DC 1", true).Render(), `18 -26 0 1 "DC 1" 1`) {
+		t.Fatal("S4Q_V vertical render wrong")
+	}
+	if !strings.Contains(Diode("D1", 0, 0, "1N4148", true).Render(), `-26 15 0 3 "1N4148" 1`) {
+		t.Fatal("DIODE_SPICE vertical render wrong")
 	}
 	c := C("C1", 0, 0, "100n", false)
 	if c.Render() != `<C C1 1 0 0 -26 17 0 0 "100n" 1>` {

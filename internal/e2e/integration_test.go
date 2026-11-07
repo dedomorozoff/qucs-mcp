@@ -93,6 +93,16 @@ R1 in out 1k ; series
 C1 out 0 100n
 .op
 .end`},
+	{"crystal", `Vant in 0 dc 0 ac 1 0
+Ra in ant 20
+L1 ant tun 250u
+C1 tun 0 100p
+D1 tun det DDET
+Cf det 0 10n
+Rh det 0 47k
+.model DDET d
+.ac dec 100 400k 3meg
+.end`},
 }
 
 // text returns the netlist source of a case.
@@ -442,6 +452,39 @@ func TestSchematicRoundTrip(t *testing.T) {
 				t.Errorf("round trip changed the connectivity: %v (warnings %v)", rep.Errors, warns)
 			}
 		})
+	}
+}
+
+// TestCrystalReceiverResonance: the showcase pretty-layout circuit —
+// source chain into a detector diode with two shunts — has to keep its
+// resonance after regenerating: f0 = 1/(2π√(250u·100p)) ≈ 1.007 MHz,
+// where the tank magnifies |v(tun)| far beyond the 1 V drive.
+func TestCrystalReceiverResonance(t *testing.T) {
+	c := build(t, "crystal")
+	c.netlist(t)
+	d := c.simulate(t)
+	freq, ok := d.Var("frequency")
+	if !ok {
+		t.Fatalf("frequency variable missing: %v", d.VarNames())
+	}
+	tun, ok := d.Var("ac.v(tun)")
+	if !ok {
+		t.Fatalf("v(tun) missing: %v", d.VarNames())
+	}
+	if len(freq.Values) != len(tun.Values) || len(tun.Values) == 0 {
+		t.Fatalf("frequency/v(tun) length mismatch: %d vs %d", len(freq.Values), len(tun.Values))
+	}
+	peakA, peakF := 0.0, 0.0
+	for i, v := range tun.Values {
+		if a := cmplx.Abs(v); a > peakA {
+			peakA, peakF = a, real(freq.Values[i])
+		}
+	}
+	if peakA < 10 {
+		t.Errorf("peak |v(tun)| = %v, want the resonant magnification above 10", peakA)
+	}
+	if peakF < 0.7e6 || peakF > 1.4e6 {
+		t.Errorf("resonance at %v Hz, want ~1 MHz", peakF)
 	}
 }
 

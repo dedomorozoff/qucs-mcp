@@ -65,9 +65,11 @@ func TestBuildRCLowPassWires(t *testing.T) {
 			labels[w.Label]++
 		}
 	}
-	// in attaches to V1 pin1 and R1 pin1; out to R1 pin2 and C1 pin1.
-	if labels["in"] != 2 || labels["out"] != 2 {
-		t.Fatalf("labels = %v, want in:2 out:2", labels)
+	// Pretty layout: each net is one labeled rail — "in" for the
+	// V1→R1 rail and "out" for the R1→C1-junction rail — instead of the
+	// legacy stub-per-pin pairs.
+	if labels["in"] != 1 || labels["out"] != 1 {
+		t.Fatalf("labels = %v, want in:1 out:1", labels)
 	}
 	// all wire endpoints and component anchors must be multiples of 10
 	// (label offsets LX/LY may be arbitrary — Qucs allows e.g. "208 270").

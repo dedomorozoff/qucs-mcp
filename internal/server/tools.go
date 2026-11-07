@@ -612,8 +612,8 @@ func (s *Server) handleDescribeComponent(_ context.Context, _ *mcp.CallToolReque
 	case "S4Q_V", "S4Q_I":
 		out.Notes = append(out.Notes,
 			"pin 1 carries the '+' marking; SPICE node order is (1, 2)",
-			"vertical placement uses Mirror=1 so pin 1 lands on top")
-	case "R", "C", "L":
+			"vertical placement uses Rot=1 so pin 1 lands on top (Mirror does not move the ports)")
+	case "R", "C", "L", "DIODE_SPICE":
 		out.Notes = append(out.Notes, "vertical placement uses Rot=3 so pin 1 lands on top")
 	case "_BJT":
 		out.Notes = append(out.Notes, "body[0] selects npn/pnp; bulk nodes are not exposed")
@@ -639,15 +639,15 @@ func exampleLine(t string) (string, string) {
 		return c.Render(), "horizontal; Rot=3 flips to vertical"
 	case "S4Q_V":
 		c := components.S4QV("V1", 100, 100, "DC 1 AC 1", false)
-		return c.Render(), "side pin 1 = '+' (SPICE first node)"
+		return c.Render(), "side pin 1 = '+' (SPICE first node); vertical: Rot=1"
 	case "S4Q_I":
 		c := components.S4QI("I1", 100, 100, "DC 1m", false)
-		return c.Render(), "pin 1 = current exit, oriented like S4Q_V"
+		return c.Render(), "pin 1 = current exit, oriented like S4Q_V; vertical: Rot=1"
 	case "GND":
 		return components.GND(100, 250).Render(), ""
 	case "DIODE_SPICE":
 		c := components.Diode("D1", 100, 220, "1N4148", false)
-		return c.Render(), "anode on the left (pin 1)"
+		return c.Render(), "anode on the left (pin 1); vertical: Rot=3 keeps the anode on top"
 	case "_BJT":
 		c := components.BJT("Q1", 100, 360, false)
 		return c.Render(), "nodes C, B, E"

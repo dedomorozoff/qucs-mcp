@@ -55,8 +55,26 @@ type Placements map[string][2]int
 // BuildPlaced renders spec with explicit component positions for refs
 // found in pl (used to preserve user-arranged positions when
 // regenerating an existing schematic).
+//
+// Without placements the pretty router runs first: two-terminal
+// circuits come out as a continuous hand-drawn chain instead of stub
+// fragments. Any topology the walker cannot express (bridges, loops,
+// semiconductors) and every placements request fall back to the legacy
+// stub layout, which is always correct.
 func BuildPlaced(spec *model.CircuitSpec, pl Placements) (*sch.Document, error) {
 	doc := sch.NewDocument(spec.Name)
+
+	if pl == nil && routePretty(doc, spec) {
+		if err := addAnalyses(doc, spec); err != nil {
+			return nil, err
+		}
+		if err := addDirectives(doc, spec); err != nil {
+			return nil, err
+		}
+		return doc, nil
+	}
+	// model-slot rewriting applies to semiconductors only, which the
+	// pretty router never renders, so the pretty path skips it.
 
 	cursorTwo := 0
 	cursorSemi := 0

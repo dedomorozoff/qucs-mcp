@@ -4,6 +4,34 @@ The short version of what each published release contains. The release
 pages carry the commit list for the build itself, so this file only
 records the releases, not every commit.
 
+## v0.1.3 — 2026-11-07
+
+Schematics look hand-drawn by default. `create_schematic` now lays out
+pure two-terminal circuits (R, C, L, diodes, SPICE sources) as a
+continuous left-to-right chain: one rail per net with a single label,
+vertical shunts under their junctions with ground symbols below, and
+the grounded source leading the chain. Topologies the new router cannot
+express (semiconductors, loops with right-side entry, double-grounded
+devices) fall back to the previous per-pin stub layout; regenerating an
+existing schematic keeps its placed positions and stays stub-based.
+
+Under the hood this exposed a real file-format bug: the two orientation
+fields of a component line are MIRROR, then ROT (measured on Qucs-S
+26.1.1), and the server used to write and read them swapped. Vertical
+passives are now `Rot=3` (pin 1 on top), vertical sources `Rot=1`, and
+the pin reconstruction follows the same rule, so what qucs-s produces
+from a generated schematic matches the model exactly. Electrical
+results are unchanged — the e2e suite drives a part of the showcase
+crystal netlist through the default path and asserts its ~1 MHz tank
+resonance.
+
+## v0.1.2 — 2026-11-06
+
+Documentation release: the change log ships inside the published
+archives, README gains licence sections and corrected badges, and the
+release workflow became reproducible from a tag (`workflow_dispatch`
+with an explicit tag input, publish step verified).
+
 ## v0.1.1 — 2026-11-06
 
 First release with published binaries: windows, linux and darwin for

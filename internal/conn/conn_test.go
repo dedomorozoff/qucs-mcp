@@ -73,14 +73,15 @@ func TestRebuildRoundTrip(t *testing.T) {
 }
 
 // TestRebuildRotatedOrientations runs the RC circuit with vertical
-// passives (Rot=3) and a mirrored source (Mirror=1) — the two
-// orientation forms the writer produces for those devices.
+// passives (Rot=3) and a vertical source (Rot=1) — the two orientation
+// forms the writer produces for those devices. Field order is MIRROR
+// then ROT, as Qucs-S 26.1.1 writes it.
 func TestRebuildRotatedOrientations(t *testing.T) {
 	src := `<Qucs Schematic 25.1.1>
 <Components>
   <S4Q_V V1 1 100 100 18 -26 0 1 "DC 0 AC 1" 1 "" 0 "" 0 "" 0 "" 0>
-  <R R1 1 300 220 -26 15 3 0 "1k" 1>
-  <C C1 1 300 340 -26 17 3 0 "100n" 1>
+  <R R1 1 300 220 -26 15 0 3 "1k" 1>
+  <C C1 1 300 340 -26 17 0 3 "100n" 1>
   <GND * 1 100 160 0 0 0 0>
   <GND * 1 300 400 0 0 0 0>
 </Components>
@@ -111,7 +112,7 @@ func TestRebuildRotatedOrientations(t *testing.T) {
 	for _, c := range spec.Components {
 		byRef[c.Ref] = c
 	}
-	// S4Q_V mirror=1: pin1 top (100,70), pin2 bottom (100,130 → gnd).
+	// S4Q_V Rot=1: pin1 top (100,70), pin2 bottom (100,130 → gnd).
 	v1 := byRef["V1"]
 	if v1.NetOf("1") != "in" || v1.NetOf("2") != "0" {
 		t.Fatalf("V1 nets: %+v", v1.Pins)

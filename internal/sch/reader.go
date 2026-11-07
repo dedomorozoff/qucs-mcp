@@ -140,8 +140,10 @@ func nthToken(line string, n int) (start, end int, ok bool) {
 	return start, end, true
 }
 
-// parseComponentLine parses `<TYPE REF 1 X Y LX LY ROT MIRROR body…>`.
-// The leading "1" after REF is Qucs's occurrence counter.
+// parseComponentLine parses `<TYPE REF 1 X Y LX LY MIRROR ROT body…>`.
+// The leading "1" after REF is Qucs's occurrence counter. The
+// orientation pair is stored mirror-first: passives with "0 3" read
+// back vertical (probe probe_rot3_horiz against Qucs-S 26.1.1).
 func parseComponentLine(line string) (*ComponentLine, error) {
 	if !strings.HasPrefix(line, "<") {
 		return nil, fmt.Errorf("not an angle-bracket line: %q", line)
@@ -158,14 +160,14 @@ func parseComponentLine(line string) (*ComponentLine, error) {
 		return nil, fmt.Errorf("unsupported component line form in %q", line)
 	}
 	nums := make([]int, 6)
-	for j := 0; j < 6; j++ { // X Y LX LY ROT MIRROR = fields 3..8
+	for j := 0; j < 6; j++ { // X Y LX LY MIRROR ROT = fields 3..8
 		v, err := strconv.Atoi(fields[3+j])
 		if err != nil {
 			return nil, fmt.Errorf("component %s %q: %w", fields[0], fields[3+j], err)
 		}
 		nums[j] = v
 	}
-	c.X, c.Y, c.LX, c.LY, c.Rot, c.Mirror = nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]
+	c.X, c.Y, c.LX, c.LY, c.Mirror, c.Rot = nums[0], nums[1], nums[2], nums[3], nums[4], nums[5]
 	// Body: everything past the 9th token, internal whitespace preserved.
 	if _, end, ok := nthToken(inner, 9); ok && end < len(inner) {
 		c.Body = strings.TrimSpace(inner[end:])

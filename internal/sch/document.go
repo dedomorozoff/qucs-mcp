@@ -1,9 +1,11 @@
 // Package sch reads and writes Qucs-S schematic files (format 25.1.1).
 //
 // Documents hold component and wire lines. Rendering follows the format
-// Qucs-S writes itself: one "<TYPE REF 1 X Y LX LY ROT MIRROR body>"
-// line per component and one "<X1 Y1 X2 Y2 "label" LX LY ROT "">" per
-// wire, inside the fixed section skeleton.
+// Qucs-S writes itself: one "<TYPE REF 1 X Y LX LY MIRROR ROT body>"
+// line per component (the orientation pair is mirror FIRST, rotation
+// second — calibrated on Qucs-S 26.1.1 with a vertical resistor) and one
+// "<X1 Y1 X2 Y2 "label" LX LY ROT "">" per wire, inside the fixed
+// section skeleton.
 package sch
 
 import (
@@ -30,13 +32,16 @@ type ComponentLine struct {
 }
 
 // Render formats the component line for insertion into a .sch file.
+// The orientation fields go out as LX LY MIRROR ROT: with the pair
+// swapped, Qucs-S treats the rotation value as a mirror flag (probe
+// bf_t0m30_b30: "3 0" produced an unrotated, disconnected resistor).
 func (c ComponentLine) Render() string {
 	b := c.Body
 	if b != "" {
 		b = " " + b
 	}
 	return fmt.Sprintf("<%s %s 1 %d %d %d %d %d %d%s>",
-		c.Type, c.Ref, c.X, c.Y, c.LX, c.LY, c.Rot, c.Mirror, b)
+		c.Type, c.Ref, c.X, c.Y, c.LX, c.LY, c.Mirror, c.Rot, b)
 }
 
 // WireLine is a single line inside <Wires>.

@@ -197,27 +197,29 @@ func directive(t string) bool {
 }
 
 // pinsAt computes catalog pin offsets transformed by the component's
-// stored Rot/Mirror. Layout only emits two orientation forms, both
-// reconstructed here:
-//   - passives/DIODE_SPICE with Rot=3: (dx,dy) rotated 3× ((x,y)->(y,-x))
-//   - S4Q_V/S4Q_I with Mirror=1: pin1 (0,-30), pin2 (0,30)
+// stored orientation pair (the struct Mirror/Rot hold the .sch fields
+// verbatim: field 7 = mirror flag, field 8 = rotation steps).
+// Empirically calibrated on Qucs-S 26.1.1 (probes probeR_rot1/rot3,
+// probe_vs2..vs4):
+//   - each rotation step maps (dx,dy) -> (dy,-dx); three steps put a
+//     passive pin1 (-30,0) on top (0,-30) and a source pin1 (30,0) on
+//     top as well, one step puts both on the bottom (0,+30);
+//   - the mirror flag flips the Y of the ports BEFORE rotation (for
+//     side pins with dy=0 that is a no-op, which is why "Mirror=1
+//     alone" leaves every two-terminal port where it was) — probed with
+//     a vertical source where mirror changes nothing and rotation does.
 func pinsAt(c sch.ComponentLine) (names []string, pts []point) {
 	base := components.PinsOf(c.Type, false)
 	if len(base) == 0 {
 		return nil, nil
 	}
-	if (c.Type == "S4Q_V" || c.Type == "S4Q_I") && c.Mirror != 0 {
-		base = components.PinsOf(c.Type, true)
-	}
 	for _, p := range base {
 		dx, dy := p.DX, p.DY
-		if !(c.Type == "S4Q_V" || c.Type == "S4Q_I") {
-			for k := 0; k < mod(c.Rot, 4); k++ {
-				dx, dy = dy, -dx
-			}
-			if c.Mirror != 0 {
-				dx = -dx
-			}
+		if c.Mirror != 0 {
+			dy = -dy
+		}
+		for k := mod(c.Rot, 4); k > 0; k-- {
+			dx, dy = dy, -dx
 		}
 		names = append(names, p.Name)
 		pts = append(pts, point{c.X + dx, c.Y + dy})

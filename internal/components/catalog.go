@@ -41,7 +41,8 @@ func body(pairs ...any) string { return Props(pairs...) }
 // ---------------------------------------------------------------- R / C / L
 
 // R builds a resistor line. vertical=true uses Rot=3 so the rotated
-// pin order becomes 1=(0,-30) top and 2=(0,30) bottom.
+// pin order (the ROT slot is the 8th field of the .sch line) becomes
+// 1=(0,-30) top and 2=(0,30) bottom.
 func R(ref string, x, y int, value string, vertical bool) sch.ComponentLine {
 	c := sch.ComponentLine{
 		Type: "R", Ref: ref, X: x, Y: y,
@@ -83,8 +84,9 @@ func L(ref string, x, y int, value string, vertical bool) sch.ComponentLine {
 // S4QV builds a SPICE-like independent voltage source. spec is the raw
 // regression SPICE value string ("DC 1", "DC 0 AC 1", "PULSE(...)", ...).
 //
-// Mirror=0 pins: 1=(+30,0) (right), 2=(-30,0) (left).
-// Mirror=1 (vertical) pins: 1=(0,-30) (top), 2=(0,30) (bottom).
+// Rot=0 pins: 1=(+30,0) (right), 2=(-30,0) (left).
+// Rot=1 (vertical) pins: 1=(0,-30) (top), 2=(0,30) (bottom) — probe
+// probe_vs4 on Qucs-S 26.1.1; Mirror=1 alone does not move the ports.
 func S4QV(ref string, x, y int, spec string, vertical bool) sch.ComponentLine {
 	c := sch.ComponentLine{
 		Type: "S4Q_V", Ref: ref, X: x, Y: y,
@@ -92,7 +94,7 @@ func S4QV(ref string, x, y int, spec string, vertical bool) sch.ComponentLine {
 		Body: body(spec, 1, "", 0, "", 0, "", 0, "", 0),
 	}
 	if vertical {
-		c.Mirror = 1
+		c.Rot = 1
 	}
 	return c
 }
@@ -106,7 +108,7 @@ func S4QI(ref string, x, y int, spec string, vertical bool) sch.ComponentLine {
 		Body: body(spec, 1, "", 0, "", 0, "", 0, "", 0),
 	}
 	if vertical {
-		c.Mirror = 1
+		c.Rot = 1
 	}
 	return c
 }
@@ -122,6 +124,10 @@ func GND(x, y int) sch.ComponentLine {
 
 // Diode builds a DIODE_SPICE with a named model from the .sch .model
 // context; model "" means the schematic's default diode model.
+// vertical=true uses Rot=3: anode (pin1) on TOP, cathode bottom —
+// probe probe_diode_v_rot3 on Qucs-S 26.1.1 (Rot=1 puts the anode on
+// the bottom, opposite to the source family because the base pins
+// differ: (-30,0)/(30,0) vs (30,0)/(-30,0)).
 func Diode(ref string, x, y int, model string, vertical bool) sch.ComponentLine {
 	c := sch.ComponentLine{
 		Type: "DIODE_SPICE", Ref: ref, X: x, Y: y,
@@ -129,7 +135,7 @@ func Diode(ref string, x, y int, model string, vertical bool) sch.ComponentLine 
 		Body: body(model, 1, "", 0, "", 0, "", 0, "", 0, "2", 1, "D", 1),
 	}
 	if vertical {
-		c.Rot = 1
+		c.Rot = 3
 	}
 	return c
 }
@@ -285,7 +291,8 @@ func PinsOf(schType string, vertical bool) []Pin {
 		base = twoPin()
 	case "S4Q_V", "S4Q_I":
 		// empirically calibrated: pin1=+30 (QuCS "+" terminal),
-		// pin2=-30; mirror=1 flips to vertical with pin1 on top.
+		// pin2=-30; Rot=1 turns the horizontal +30/-30 pins into
+		// pin1 top / pin2 bottom.
 		base = []Pin{{Name: "1", DX: 30, DY: 0}, {Name: "2", DX: -30, DY: 0}}
 	case "_BJT":
 		base = []Pin{{Name: "C", DX: 0, DY: -30}, {Name: "B", DX: -30, DY: 0}, {Name: "E", DX: 0, DY: 30}}
@@ -301,7 +308,7 @@ func PinsOf(schType string, vertical bool) []Pin {
 	}
 	switch schType {
 	case "S4Q_V", "S4Q_I":
-		// empirically calibrated on this install: mirror=1 turns the
+		// empirically calibrated on this install: Rot=1 turns the
 		// horizontal +30/-30 pins into pin1 top / pin2 bottom.
 		return []Pin{{Name: "1", DX: 0, DY: -30}, {Name: "2", DX: 0, DY: 30}}
 	default:
@@ -316,6 +323,31 @@ func PinsOf(schType string, vertical bool) []Pin {
 }
 
 func twoPin() []Pin { return []Pin{{Name: "1", DX: -30, DY: 0}, {Name: "2", DX: 30, DY: 0}} }
+
+// TopPinRot returns the ROT value that orients a two-terminal vertical
+// device with the given pin index (0 = first netlist pin) on TOP, at
+// (0,-30) from the anchor. These were probed against Qucs-S 26.1.1:
+// passives and diodes carry base pins (-30,0)/(30,0), so the same total
+// transform puts pin1 on top at Rot=3 and on the bottom at Rot=1;
+// sources carry base pins (30,0)/(-30,0), which inverts the pair
+// (Rot=1 → pin1 top, Rot=3 → pin2 top). ok=false for multi-pin types —
+// the pretty router keeps semiconductors out and the legacy layout
+// never places them vertically.
+func TopPinRot(schType string, pinIndex int) (int, bool) {
+	switch schType {
+	case "R", "C", "L", "DIODE_SPICE":
+		if pinIndex == 0 {
+			return 3, true
+		}
+		return 1, true
+	case "S4Q_V", "S4Q_I":
+		if pinIndex == 0 {
+			return 1, true
+		}
+		return 3, true
+	}
+	return 0, false
+}
 
 // Supported reports whether schType is in the catalog.
 func Supported(schType string) bool {
