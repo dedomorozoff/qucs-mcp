@@ -57,10 +57,11 @@ type Placements map[string][2]int
 // regenerating an existing schematic).
 //
 // Without placements the pretty router runs first: two-terminal
-// circuits come out as a continuous hand-drawn chain instead of stub
-// fragments. Any topology the walker cannot express (bridges, loops,
-// semiconductors) and every placements request fall back to the legacy
-// stub layout, which is always correct.
+// circuits and expressible single-transistor stages come out as a
+// continuous hand-drawn chain instead of stub fragments. Any topology
+// the walker cannot express (bridges, loops, stages with floating
+// emitter legs, unknown devices) and every placements request falls
+// back to the legacy stub layout, which is always correct.
 func BuildPlaced(spec *model.CircuitSpec, pl Placements) (*sch.Document, error) {
 	doc := sch.NewDocument(spec.Name)
 
@@ -73,8 +74,9 @@ func BuildPlaced(spec *model.CircuitSpec, pl Placements) (*sch.Document, error) 
 		}
 		return doc, nil
 	}
-	// model-slot rewriting applies to semiconductors only, which the
-	// pretty router never renders, so the pretty path skips it.
+	// model-slot rewriting applies to semiconductors only; the pretty
+	// path applies it to stage bodies itself (applyModelParams in
+	// route.go).
 
 	cursorTwo := 0
 	cursorSemi := 0

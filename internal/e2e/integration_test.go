@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"math"
 	"math/cmplx"
 	"path/filepath"
 	"strings"
@@ -102,6 +103,26 @@ Cf det 0 10n
 Rh det 0 47k
 .model DDET d
 .ac dec 100 400k 3meg
+.end`},
+	{"trf", `Vant in 0 dc 0 ac 1 0
+Ra in ant 100
+L1 ant tun 250u
+C1 tun 0 75p
+Cc tun aud 10n
+Rb1 vcc aud 100k
+Rb2 aud 0 22k
+Q1 amp aud em0 Qmod
+Re em0 0 1k
+Ce em0 0 100u
+Rc vcc amp 10k
+D1 amp det DDET
+Cf det 0 1n
+Rh det 0 10k
+V1 vcc 0 dc 6
+.model DDET d is=1e-14
+.model Qmod npn bf=150 is=1e-15 vaf=25 cje=2p cjc=1p
+.ac dec 100 400k 3meg
+.op
 .end`},
 }
 
@@ -485,6 +506,66 @@ func TestCrystalReceiverResonance(t *testing.T) {
 	}
 	if peakF < 0.7e6 || peakF > 1.4e6 {
 		t.Errorf("resonance at %v Hz, want ~1 MHz", peakF)
+	}
+}
+
+// TestTRFReceiverStage: the one-transistor receiver — the showcase
+// pretty-extended circuit — must keep a working RF stage through the
+// default path: a working DC bias (transistor in the active region),
+// tank selectivity, and RF gain from the base to the collector.
+func TestTRFReceiverStage(t *testing.T) {
+	c := build(t, "trf")
+	c.netlist(t)
+	d := c.simulate(t)
+	freq, ok := d.Var("frequency")
+	if !ok {
+		t.Fatalf("frequency variable missing: %v", d.VarNames())
+	}
+	tun, ok := d.Var("ac.v(tun)")
+	if !ok {
+		t.Fatalf("v(tun) missing: %v", d.VarNames())
+	}
+	peakA, peakF := 0.0, 0.0
+	for i, v := range tun.Values {
+		if a := cmplx.Abs(v); a > peakA {
+			peakA, peakF = a, real(freq.Values[i])
+		}
+	}
+	// the tank (250u with ~85p effective capacitance) peaks near 1 MHz
+	if peakF < 0.8e6 || peakF > 1.2e6 {
+		t.Errorf("resonance at %v Hz, want ~1 MHz", peakF)
+	}
+	idx := -1
+	best := 0.0
+	for i, f := range freq.Values {
+		if df := math.Abs(real(f) - peakF); idx < 0 || df < best {
+			idx, best = i, df
+		}
+	}
+	aud, okA := d.Var("ac.v(aud)")
+	amp, okV := d.Var("ac.v(amp)")
+	if !okA || !okV {
+		t.Fatalf("stage node variables missing: %v", d.VarNames())
+	}
+	gain := cmplx.Abs(amp.Values[idx]) / cmplx.Abs(aud.Values[idx])
+	if gain < 2 {
+		t.Errorf("RF stage gain %v, want amplification", gain)
+	}
+	// the .op part of the same run: transistor in the active region
+	// (base ~1 V, collector above the emitter drop)
+	dc, okDC := d.Var("v(aud)")
+	dcAmp, okAmp := d.Var("v(amp)")
+	dcEm, okEm := d.Var("v(em0)")
+	if !okDC || !okAmp || !okEm {
+		t.Logf("no operating point series in the dataset: %v", d.VarNames())
+		return
+	}
+	if real(dc.Values[0]) < 0.5 || real(dc.Values[0]) > 2.0 {
+		t.Errorf("DC base = %v, want ~1 V (active bias)", real(dc.Values[0]))
+	}
+	if real(dcAmp.Values[0]) <= real(dcEm.Values[0])+0.2 {
+		t.Errorf("collector = %v V, emitter = %v V: transistor not active",
+			real(dcAmp.Values[0]), real(dcEm.Values[0]))
 	}
 }
 

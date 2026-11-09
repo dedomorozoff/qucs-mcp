@@ -4,6 +4,22 @@ The short version of what each published release contains. The release
 pages carry the commit list for the build itself, so this file only
 records the releases, not every commit.
 
+## v0.1.4 — 2026-11-09
+
+The pretty router draws transistor stages. `_BJT` and `_MOSFET` join the
+signal chain like any other device: base/gate on the current row,
+collector/drain on an exit rail one row up — where the chain continues —
+and the emitter/source leg dropping below into its own labeled rail
+carrying its grounded bypasses (or reaching straight into a ground
+symbol). Load resistors that join two chain nets (the classic collector
+resistor `Rc`) rise as vertical feeders off the exit rail with their
+supply pin becoming a labeled stub. The one-transistor TRF receiver —
+tank into a biased stage with a bypassed emitter, detector at the
+collector — now comes out as one continuous circuit instead of falling
+back to fragments. The all-or-nothing contract is unchanged: topologies
+the stage walker cannot express (bridges, floating emitter legs, loops)
+still fall back to the per-pin stub layout.
+
 ## v0.1.3 — 2026-11-07
 
 Schematics look hand-drawn by default. `create_schematic` now lays out
