@@ -16,9 +16,16 @@ resistor `Rc`) rise as vertical feeders off the exit rail with their
 supply pin becoming a labeled stub. The one-transistor TRF receiver —
 tank into a biased stage with a bypassed emitter, detector at the
 collector — now comes out as one continuous circuit instead of falling
-back to fragments. The all-or-nothing contract is unchanged: topologies
-the stage walker cannot express (bridges, floating emitter legs, loops)
-still fall back to the per-pin stub layout.
+back to fragments. Load resistors that join two chain nets (the classic
+collector resistor `Rc`) rise as vertical feeders off the exit rail with
+their supply pin becoming a labeled stub. The bias source V1/Rb1 of the
+TRF stage is attached to the feeder stub through an overhead bus wire
+(rising from the source's exit to the stub row and running along it),
+so the supply block is no longer a separate floating piece.
+
+The all-or-nothing contract is unchanged: topologies the stage walker
+cannot express (bridges, floating emitter legs, loops) still fall back
+to the per-pin stub layout.
 
 ## v0.1.3 — 2026-11-07
 

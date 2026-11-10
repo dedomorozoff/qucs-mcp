@@ -382,6 +382,15 @@ func TestRoutePrettyBJTStage(t *testing.T) {
 	if !wireIn(doc, sch.WireLine{X1: 740, Y1: prettyRailY - 90, X2: 740, Y2: prettyRailY - 130, Label: "vcc"}) {
 		t.Fatalf("Rc vcc stub missing:\n%s", rend)
 	}
+	// overhead bus: V1's + exit wires up to the Rc stub end and runs
+	// along the stub row to it — the bias source is no longer a free
+	// floating piece
+	if !wireIn(doc, sch.WireLine{X1: 1120, Y1: prettyRailY, X2: 1120, Y2: prettyRailY - 130}) {
+		t.Fatalf("vcc bus to the bias source missing:\n%s", rend)
+	}
+	if !wireIn(doc, sch.WireLine{X1: 1120, Y1: prettyRailY - 130, X2: 740, Y2: prettyRailY - 130}) {
+		t.Fatalf("vcc bus run missing:\n%s", rend)
+	}
 	// the amp rail passes exactly at the Rc bottom pin and ends at D1
 	if !wireIn(doc, sch.WireLine{X1: 740, Y1: prettyRailY - 30, X2: 800, Y2: prettyRailY - 30}) {
 		t.Fatalf("amp rail to D1 missing:\n%s", rend)

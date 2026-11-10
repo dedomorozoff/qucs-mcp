@@ -379,6 +379,10 @@ func routePretty(doc *sch.Document, spec *model.CircuitSpec) bool {
 	maxRight := 0
 	rendered := map[string]bool{}
 	feederDone := map[int]bool{}
+	// busAnchors remembers the dangling labeled-stub end points that
+	// earlier chains rendered for a net; a later chain's exit on the same
+	// net joins to the nearest such point through an overhead bus wire.
+	busAnchors := map[string][][2]int{}
 
 	// pending carries the exit rail from one device to the next: true
 	// while the current exit net must flow into the next device's left
@@ -438,6 +442,7 @@ func routePretty(doc *sch.Document, spec *model.CircuitSpec) bool {
 				// floating head: a short labeled tail pointing left
 				drawStub(out, entryX-stubLen, row, entryX, row, entryNet)
 				rendered[entryNet] = true
+				busAnchors[entryNet] = append(busAnchors[entryNet], [2]int{entryX - stubLen, row})
 			}
 		} else {
 			// Rail continuing from the previous exit; its junction
@@ -480,11 +485,12 @@ func routePretty(doc *sch.Document, spec *model.CircuitSpec) bool {
 				return false // plan invariant; never expected to fire
 			}
 			nextEntry, maxJX := drawExitRail(out, spec, plan, exitNet, exitX, exitY,
-				feederDone, rendered, true)
+				feederDone, rendered, true, busAnchors)
 			if nextEntry < 0 {
 				return false // plan invariant; never expected to fire
 			}
 			maxRight = max(maxRight, maxJX, nextEntry)
+			connectBus(out, exitNet, exitX, exitY, busAnchors)
 			pending.active = true
 			pending.entryX = nextEntry
 		default:
@@ -497,13 +503,23 @@ func routePretty(doc *sch.Document, spec *model.CircuitSpec) bool {
 			fs := pendingFeeders(plan, comps, exitNet, feederDone)
 			if k == 0 && len(fs) == 0 {
 				sx := exitX + stubLen
-				drawStub(out, exitX, exitY, sx, exitY, exitNet)
-				rendered[exitNet] = true
-				maxRight = max(maxRight, sx)
+				if connectBus(out, exitNet, exitX, exitY, busAnchors) {
+					// bridged to an earlier chain's dangling stub: the bus
+					// wire already reaches it, so no fresh tail stub is
+					// drawn
+					rendered[exitNet] = true
+					maxRight = max(maxRight, sx)
+				} else {
+					drawStub(out, exitX, exitY, sx, exitY, exitNet)
+					rendered[exitNet] = true
+					maxRight = max(maxRight, sx)
+					busAnchors[exitNet] = append(busAnchors[exitNet], [2]int{sx, exitY})
+				}
 			} else {
 				_, maxJX := drawExitRail(out, spec, plan, exitNet, exitX, exitY,
-					feederDone, rendered, false)
+					feederDone, rendered, false, busAnchors)
 				maxRight = max(maxRight, maxJX)
+				connectBus(out, exitNet, exitX, exitY, busAnchors)
 			}
 			pending.active = false
 		}
@@ -543,7 +559,7 @@ func routePretty(doc *sch.Document, spec *model.CircuitSpec) bool {
 // -1 and the rail simply ends at the last slot. The second result is
 // the rightmost x of anything drawn.
 func drawExitRail(out *sch.Document, spec *model.CircuitSpec, plan layoutPlan,
-	exitNet string, exitX, exitY int, feederDone map[int]bool, rendered map[string]bool, contin bool) (int, int) {
+	exitNet string, exitX, exitY int, feederDone map[int]bool, rendered map[string]bool, contin bool, busAnchors map[string][][2]int) (int, int) {
 
 	k := 0
 	if !rendered[exitNet] {
@@ -577,7 +593,7 @@ func drawExitRail(out *sch.Document, spec *model.CircuitSpec, plan layoutPlan,
 		maxX = js[k-1]
 	}
 	if len(fs) > 0 {
-		if x := renderFeeders(out, spec, fs, js[k:], exitY, feederDone); x > maxX {
+		if x := renderFeeders(out, spec, fs, js[k:], exitY, feederDone, busAnchors); x > maxX {
 			maxX = x
 		}
 	}
@@ -691,7 +707,7 @@ func renderHangers(doc *sch.Document, spec *model.CircuitSpec, hs []hangDev, js 
 // body sits one pin above the junction (anchor railY-30), so the rail
 // pin rests exactly on the rail slot while the far pin rises at
 // railY-60 into a labeled stub naming the second net.
-func renderFeeders(doc *sch.Document, spec *model.CircuitSpec, fs []feederDev, js []int, railY int, done map[int]bool) int {
+func renderFeeders(doc *sch.Document, spec *model.CircuitSpec, fs []feederDev, js []int, railY int, done map[int]bool, anchors map[string][][2]int) int {
 	for i, f := range fs {
 		x := js[i]
 		c := spec.Components[f.comp]
@@ -706,6 +722,7 @@ func renderFeeders(doc *sch.Document, spec *model.CircuitSpec, fs []feederDev, j
 			X1: x, Y1: railY - 60, X2: x, Y2: railY - 60 - stubLen,
 			Label: stubNet, LX: x + 5, LY: railY - 60 - 10,
 		})
+		anchors[stubNet] = append(anchors[stubNet], [2]int{x, railY - 60 - stubLen})
 		done[f.comp] = true
 	}
 	return js[len(js)-1]
@@ -725,6 +742,31 @@ func drawRail(doc *sch.Document, pts [][2]int, net string) {
 		}
 		doc.AddWire(w)
 	}
+}
+
+// connectBus draws the overhead bus that joins a chain exit to a
+// dangling labeled stub left by an earlier chain on the same net: the
+// wire rises from the exit point to the stub row and runs along it to
+// the stub's dangling end. The stub already carries the net label, so
+// no label is added here. Returns true when the exit was bridged this
+// way and the caller must not draw a fresh floating tail stub.
+func connectBus(out *sch.Document, exitNet string, exitX, exitY int, anchors map[string][][2]int) bool {
+	var p [2]int
+	found := false
+	for _, a := range anchors[exitNet] {
+		if a[0] >= exitX || a[1] >= exitY {
+			continue // bridges only approach from the left, from above
+		}
+		if !found || a[0] > p[0] {
+			p, found = a, true
+		}
+	}
+	if !found {
+		return false
+	}
+	out.AddWire(sch.WireLine{X1: exitX, Y1: exitY, X2: exitX, Y2: p[1]})
+	out.AddWire(sch.WireLine{X1: exitX, Y1: p[1], X2: p[0], Y2: p[1]})
+	return true
 }
 
 // drawStub draws a standalone labeled tail between two points.
