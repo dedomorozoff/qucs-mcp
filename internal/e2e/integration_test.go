@@ -124,7 +124,7 @@ V1 vcc 0 dc 6
 .ac dec 100 400k 3meg
 .op
 .end`},
-	{"opamp", `V2 vin 0 dc 0 ac 1
+	{"bjt_amp", `V2 vin 0 dc 0 ac 1
 R1 vin base 1k
 Q1 vout base em0 Qmod
 Re em0 0 1k
@@ -580,11 +580,12 @@ func TestTRFReceiverStage(t *testing.T) {
 	}
 }
 
-// TestAmplifierResponse: the simple amplifier (source → R1 → BJT stage
-// with emitter feedback and collector load) must show a flat AC gain of
-// about 10 (20 dB) over the sweep — the dynamic range of the amplifier.
+// TestAmplifierResponse: the single-transistor amplifier (source → R1 →
+// BJT stage with emitter feedback and collector load) must show a flat
+// AC gain of about 50 (~35 dB) over the sweep — the dynamic range of
+// the amplifier.
 func TestAmplifierResponse(t *testing.T) {
-	c := build(t, "opamp")
+	c := build(t, "bjt_amp")
 	c.netlist(t)
 	d := c.simulate(t)
 	freq, ok := d.Var("frequency")

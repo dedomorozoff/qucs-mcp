@@ -16,14 +16,12 @@ resistor `Rc`) rise as vertical feeders off the exit rail with their
 supply pin becoming a labeled stub. The one-transistor TRF receiver —
 tank into a biased stage with a bypassed emitter, detector at the
 collector — now comes out as one continuous circuit instead of falling
-back to fragments. Load resistors that join two chain nets (the classic
-collector resistor `Rc`) rise as vertical feeders off the exit rail with
-their supply pin becoming a labeled stub. The bias source V1/Rb1 of the
+back to fragments. The bias source V1/Rb1 of the
 TRF stage is attached to the feeder stub through an overhead bus wire
 (rising from the source's exit to the stub row and running along it),
 so the supply block is no longer a separate floating piece.
 
-The simple op-amp-style amplifier joins the showcase as case `opamp`:
+The single-transistor amplifier joins the showcase as case `bjt_amp`:
 source → R1 → BJT stage (emitter feedback via Re/Ce, collector load via
 Rc) with a flat AC gain asserted end to end against the real simulator,
 which covers the amplifier's dynamic-range response (gain vs frequency).
