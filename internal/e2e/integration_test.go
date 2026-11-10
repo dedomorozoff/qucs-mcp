@@ -124,6 +124,17 @@ V1 vcc 0 dc 6
 .ac dec 100 400k 3meg
 .op
 .end`},
+	{"opamp", `V2 vin 0 dc 0 ac 1
+R1 vin base 1k
+Q1 vout base em0 Qmod
+Re em0 0 1k
+Ce em0 0 100u
+Rc vcc vout 10k
+V1 vcc 0 dc 5
+Rb1 vcc base 5k
+.model Qmod npn bf=150 is=1e-15 vaf=25 cje=2p cjc=1p
+.ac dec 100 10 10meg
+.end`},
 }
 
 // text returns the netlist source of a case.
@@ -566,6 +577,48 @@ func TestTRFReceiverStage(t *testing.T) {
 	if real(dcAmp.Values[0]) <= real(dcEm.Values[0])+0.2 {
 		t.Errorf("collector = %v V, emitter = %v V: transistor not active",
 			real(dcAmp.Values[0]), real(dcEm.Values[0]))
+	}
+}
+
+// TestAmplifierResponse: the simple amplifier (source → R1 → BJT stage
+// with emitter feedback and collector load) must show a flat AC gain of
+// about 10 (20 dB) over the sweep — the dynamic range of the amplifier.
+func TestAmplifierResponse(t *testing.T) {
+	c := build(t, "opamp")
+	c.netlist(t)
+	d := c.simulate(t)
+	freq, ok := d.Var("frequency")
+	if !ok {
+		t.Fatalf("frequency variable missing: %v", d.VarNames())
+	}
+	in, ok := d.Var("ac.v(vin)")
+	if !ok {
+		t.Fatalf("v(vin) missing: %v", d.VarNames())
+	}
+	out, ok := d.Var("ac.v(vout)")
+	if !ok {
+		t.Fatalf("v(vout) missing: %v", d.VarNames())
+	}
+	if len(in.Values) != len(freq.Values) || len(in.Values) != len(out.Values) {
+		t.Fatalf("series lengths differ: in=%d out=%d freq=%d",
+			len(in.Values), len(out.Values), len(freq.Values))
+	}
+	// gain vs frequency: the dynamic-range diagram of the amplifier
+	gains := make([]float64, len(in.Values))
+	var peakGain, peakF = 0.0, 0.0
+	for i := range in.Values {
+		gains[i] = cmplx.Abs(out.Values[i]) / cmplx.Abs(in.Values[i])
+		if gains[i] > peakGain {
+			peakGain, peakF = gains[i], real(freq.Values[i])
+		}
+	}
+	t.Logf("amplifier gain: peak %v @ %v Hz, mid-band %v", peakGain, peakF, gains[len(gains)/2])
+	if peakGain < 5 {
+		t.Errorf("amplifier gain %v, want ~10 (20 dB)", peakGain)
+	}
+	mid := len(gains) / 2
+	if mid >= len(gains) || gains[mid] < 0.5*peakGain || gains[mid] > 2*peakGain {
+		t.Errorf("gain not flat: mid %v peak %v", gains[mid], peakGain)
 	}
 }
 

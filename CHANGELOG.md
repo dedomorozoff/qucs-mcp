@@ -23,6 +23,11 @@ TRF stage is attached to the feeder stub through an overhead bus wire
 (rising from the source's exit to the stub row and running along it),
 so the supply block is no longer a separate floating piece.
 
+The simple op-amp-style amplifier joins the showcase as case `opamp`:
+source → R1 → BJT stage (emitter feedback via Re/Ce, collector load via
+Rc) with a flat AC gain asserted end to end against the real simulator,
+which covers the amplifier's dynamic-range response (gain vs frequency).
+
 The all-or-nothing contract is unchanged: topologies the stage walker
 cannot express (bridges, floating emitter legs, loops) still fall back
 to the per-pin stub layout.
